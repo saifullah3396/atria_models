@@ -25,6 +25,7 @@ Version: 1.0.0
 License: MIT
 """
 
+import io
 from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,25 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+
+def _checkpoint_to_bytes(checkpoint: dict[str, Any]) -> io.BytesIO:
+    import torch
+
+    buffer = io.BytesIO()
+    torch.save(checkpoint, buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def _bytes_to_checkpoint(buffer: bytes) -> "torch.nn.Module":
+    import torch
+
+    buffer = io.BytesIO(buffer)
+    buffer.seek(0)
+
+    # Load the state dict
+    return torch.load(buffer, map_location=torch.device("cpu"))
 
 
 class CheckpointConfig(BaseModel):

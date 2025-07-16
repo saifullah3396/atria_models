@@ -23,8 +23,8 @@ License: MIT
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
-from atria_core.transforms.base import DataTransform
-from atria_core.types import DocumentInstance, ImageInstance
+from atria_core.transforms.base import DataTransformsDict
+from atria_core.types import DocumentInstance, ImageInstance, TaskType
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.pipelines.classification.base import ClassificationPipeline
@@ -68,7 +68,13 @@ class MixupConfig:
 
 
 @MODEL_PIPELINE.register(
-    "image_classification", hydra_defaults=["_self_", {"/model@model": "timm"}]
+    "image_classification",
+    hydra_defaults=[
+        "_self_",
+        {"/model@model": "timm"},
+        {"/data_transform@runtime_transforms.train": "image/default"},
+        {"/data_transform@runtime_transforms.evaluation": "image/default"},
+    ],
 )
 @setup_model_pipeline_config()
 class ImageClassificationPipeline(ClassificationPipeline):
@@ -84,12 +90,14 @@ class ImageClassificationPipeline(ClassificationPipeline):
         mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
     """
 
+    _TASK_TYPE: TaskType = TaskType.image_classification
+
     def __init__(
         self,
         model: AtriaModel | dict[str, AtriaModel],
         checkpoint_configs: list[CheckpointConfig] | None = None,
         mixup_config: MixupConfig | None = None,
-        input_transform: DataTransform | None = None,
+        runtime_transforms: DataTransformsDict | None = None,
     ):
         """
         Initialize the ImageClassificationPipeline.
@@ -104,7 +112,7 @@ class ImageClassificationPipeline(ClassificationPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            input_transform=input_transform,
+            runtime_transforms=runtime_transforms,
         )
 
     def training_step(

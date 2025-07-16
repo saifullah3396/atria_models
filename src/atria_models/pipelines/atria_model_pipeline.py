@@ -23,14 +23,21 @@ License: MIT
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeVar, Union
+from functools import wraps
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union
 
 from atria_core.logger import get_logger
-from atria_core.transforms.base import DataTransform
-from atria_core.types import BaseDataInstance, TrainingStage
+from atria_core.transforms.base import DataTransformsDict
+from atria_core.types import BaseDataInstance, TaskType, TrainingStage
+from atria_registry.utilities import _instantiate_object_from_config
+from omegaconf import OmegaConf
 
 from atria_models.core.atria_model import AtriaModel
-from atria_models.utilities.checkpoints import CheckpointConfig
+from atria_models.utilities.checkpoints import (
+    CheckpointConfig,
+    _bytes_to_checkpoint,
+    _checkpoint_to_bytes,
+)
 from atria_models.utilities.config import setup_model_pipeline_config
 
 if TYPE_CHECKING:
@@ -44,8 +51,6 @@ if TYPE_CHECKING:
     from atria_models.utilities.nn_modules import AtriaModelDict
 
 logger = get_logger(__name__)
-
-BaseDataInstanceType = TypeVar("BaseDataInstance", bound=BaseDataInstance)
 
 
 @setup_model_pipeline_config()
@@ -63,12 +68,13 @@ class AtriaModelPipeline(ABC):
 
     _REQUIRES_MODEL_DICT: ClassVar[bool] = False
     _REQUIRED_MODEL_KEYS: ClassVar[list[str]] = []
+    _TASK_TYPE: TaskType
 
     def __init__(
         self,
         model: AtriaModel | dict[str, AtriaModel],
         checkpoint_configs: list[CheckpointConfig] | None = None,
-        input_transform: DataTransform | None = None,
+        runtime_transforms: DataTransformsDict | None = None,
     ):
         """
         Initializes the AtriaModelPipeline instance.
@@ -79,9 +85,54 @@ class AtriaModelPipeline(ABC):
         """
         self._model = model
         self._checkpoint_configs = checkpoint_configs
-        self._input_transform = input_transform
+        self._runtime_transforms = runtime_transforms
+        self._dataset_metadata = None
+        self._tb_logger = None
         self._progress_bar = None
+        self._is_built = False
+        self._apply_runtime_transforms = False
         self._validate_model_input(model=model)
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+
+        original_training_step = cls.training_step
+        original_evaluation_step = cls.evaluation_step
+        original_predict_step = cls.predict_step
+        original_visualization_step = cls.visualization_step
+
+        @wraps(original_training_step)
+        def wrapped_training_step(
+            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+        ):
+            batch = self._transform_batch(batch, transform_type="evaluation")
+            return original_training_step(self, batch, **kwargs)
+
+        @wraps(original_evaluation_step)
+        def wrapped_evaluation_step(
+            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+        ):
+            batch = self._transform_batch(batch, transform_type="evaluation")
+            return original_evaluation_step(self, batch, **kwargs)
+
+        @wraps(original_predict_step)
+        def wrapped_predict_step(
+            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+        ):
+            batch = self._transform_batch(batch, transform_type="evaluation")
+            return original_predict_step(self, batch, **kwargs)
+
+        @wraps(original_visualization_step)
+        def wrapped_visualization_step(
+            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+        ):
+            batch = self._transform_batch(batch, transform_type="evaluation")
+            return original_visualization_step(self, batch, **kwargs)
+
+        cls.training_step = wrapped_training_step
+        cls.evaluation_step = wrapped_evaluation_step
+        cls.predict_step = wrapped_predict_step
+        cls.visualization_step = wrapped_visualization_step
 
     @property
     def model_name(self) -> str:
@@ -149,6 +200,18 @@ class AtriaModelPipeline(ABC):
         """
         self._progress_bar = progress_bar
 
+    def enable_runtime_transforms(self) -> None:
+        """
+        Enables the application of runtime transforms during model execution.
+        """
+        self._apply_runtime_transforms = True
+
+    def disable_runtime_transforms(self) -> None:
+        """
+        Disables the application of runtime transforms during model execution.
+        """
+        self._apply_runtime_transforms = False
+
     def build(
         self,
         dataset_metadata: Optional["DatasetMetadata"] = None,
@@ -182,6 +245,31 @@ class AtriaModelPipeline(ABC):
         if idist.get_rank() == 0:
             idist.barrier()
 
+        self._is_built = True
+
+        return self
+
+    def build_from_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """
+        Builds the model from a checkpoint.
+
+        Args:
+            checkpoint (dict[str, Any]): The checkpoint dictionary containing model state.
+        """
+        from atria_core.types import DatasetMetadata
+
+        dataset_metadata = checkpoint.pop("dataset_metadata", None)
+        if dataset_metadata is None:
+            raise ValueError(
+                "Checkpoint must contain 'dataset_metadata'. "
+                "Please ensure the model was saved with the dataset metadata."
+            )
+        dataset_metadata = DatasetMetadata.model_validate(dataset_metadata)
+        self.build(
+            dataset_metadata=dataset_metadata,
+            tb_logger=None,  # Tensorboard logger is not used in this context
+        )
+        self.load_state_dict(checkpoint)
         return self
 
     def to_device(self, device: "torch.device", sync_bn: bool = False) -> None:
@@ -302,6 +390,8 @@ class AtriaModelPipeline(ABC):
         Returns:
             dict: The state dictionary.
         """
+        from omegaconf import OmegaConf
+
         from atria_models.utilities.nn_modules import AtriaModelDict
 
         state_dict = {}
@@ -314,6 +404,7 @@ class AtriaModelPipeline(ABC):
             )
         else:
             state_dict["model"] = self.model.state_dict()
+        state_dict["config"] = OmegaConf.to_container(self.config)
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
@@ -339,10 +430,114 @@ class AtriaModelPipeline(ABC):
             else:
                 self._model.load_state_dict(state_dict["model"])
 
+    def upload_to_hub(
+        self,
+        name: str,
+        branch: str = "main",
+        description: str | None = None,
+        is_public: bool = False,
+    ) -> None:
+        assert self._is_built, (
+            "Model must be built before uploading to the hub. "
+            "Call `build()` method before uploading."
+        )
+        try:
+            import atria_hub  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "The 'atria_hub' package is required to load datasets from the hub. "
+                "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
+            )
+
+        from atria_hub.hub import AtriaHub
+
+        if description is None:
+            description = f"A {self.__class__.__name__} model checkpoint."
+
+        logger.info(
+            f"Uploading model {self.__class__.__name__} to hub with name {name} and config {branch}."
+        )
+
+        # initialize the AtriaHub client
+        hub = AtriaHub()
+
+        # create a new model in the hub or get the existing one
+        model = hub.models.get_or_create(
+            name=name,
+            description=description,
+            task_type=self._TASK_TYPE,
+            is_public=is_public,
+        )
+
+        # upload the model checkpoint to the hub at the specified branch
+        hub.models.upload_checkpoint(
+            model=model,
+            branch=branch,
+            model_checkpoint=_checkpoint_to_bytes(self.state_dict()),
+            model_config=OmegaConf.to_container(self.config, resolve=True),
+        )
+
+    @classmethod
+    def load_from_hub(cls, name: str, branch: str = "main"):
+        try:
+            import atria_hub  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "The 'atria_hub' package is required to load datasets from the hub. "
+                "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
+            )
+
+        from atria_hub.hub import AtriaHub
+
+        logger.info(f"Loading model {name}/{branch} from hub.")
+
+        # initialize the AtriaHub client
+        hub = AtriaHub()
+
+        # create a new model in the hub or get the existing one
+        model = hub.models.get(name=name)
+
+        # upload the model checkpoint to the hub at the specified branch
+        checkpoint = _bytes_to_checkpoint(
+            hub.models.load_checkpoint(model=model, branch=branch)
+        )
+
+        # first we get the model config
+        config = checkpoint.pop("config", None)
+        if config is None:
+            raise ValueError(
+                "The model checkpoint does not contain a 'config' key. "
+                "Please ensure the model was saved with the configuration."
+            )
+        model: AtriaModelPipeline = _instantiate_object_from_config(config)
+        return model.build_from_checkpoint(checkpoint)
+
+    def _transform_batch(
+        self,
+        batch: BaseDataInstance | list[BaseDataInstance],
+        transform_type: str = "train",
+    ) -> BaseDataInstance:
+        """
+        Hook to be called before the training step.
+        Override this method in subclasses to implement custom behavior.
+        """
+        transform = (
+            self._runtime_transforms.train
+            if transform_type == "train"
+            else self._runtime_transforms.evaluation
+        )
+        if self._apply_runtime_transforms:
+            assert isinstance(batch, list) and not any(x.is_batched for x in batch), (
+                "Batch must be a list of untransformed BaseDataInstance when applying runtime transforms."
+            )
+            batch = [transform(sample).load().to_tensor() for sample in batch]
+            batch = batch[0].batched(batch)
+        return batch
+
     @abstractmethod
     def training_step(
         self,
-        batch: BaseDataInstanceType,
+        batch: BaseDataInstance,
         training_engine: Optional["Engine"] = None,
         **kwargs,
     ) -> "ModelOutput":
@@ -350,7 +545,7 @@ class AtriaModelPipeline(ABC):
         Defines the training step for the model.
 
         Args:
-            batch (BaseDataInstanceType): The input batch.
+            batch (BaseDataInstance): The input batch.
             training_engine (Optional[Engine]): The training engine instance.
             **kwargs: Additional arguments.
 
@@ -361,7 +556,7 @@ class AtriaModelPipeline(ABC):
     @abstractmethod
     def evaluation_step(
         self,
-        batch: BaseDataInstanceType,
+        batch: BaseDataInstance,
         evaluation_engine: Optional["Engine"] = None,
         training_engine: Optional["Engine"] = None,
         stage: TrainingStage = TrainingStage.test,
@@ -371,7 +566,7 @@ class AtriaModelPipeline(ABC):
         Defines the evaluation step for the model.
 
         Args:
-            batch (BaseDataInstanceType): The input batch.
+            batch (BaseDataInstance): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             training_engine (Optional[Engine]): The training engine instance.
             stage (TrainingStage): The current training stage.
@@ -384,7 +579,7 @@ class AtriaModelPipeline(ABC):
     @abstractmethod
     def predict_step(
         self,
-        batch: BaseDataInstanceType,
+        batch: BaseDataInstance,
         evaluation_engine: Optional["Engine"] = None,
         **kwargs,
     ) -> "ModelOutput":
@@ -392,7 +587,7 @@ class AtriaModelPipeline(ABC):
         Defines the prediction step for the model.
 
         Args:
-            batch (BaseDataInstanceType): The input batch.
+            batch (BaseDataInstance): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             **kwargs: Additional arguments.
 
@@ -402,7 +597,7 @@ class AtriaModelPipeline(ABC):
 
     def visualization_step(
         self,
-        batch: BaseDataInstanceType,
+        batch: BaseDataInstance,
         evaluation_engine: Optional["Engine"] = None,
         training_engine: Optional["Engine"] = None,
         **kwargs,
@@ -411,7 +606,7 @@ class AtriaModelPipeline(ABC):
         Defines the visualization step for the model.
 
         Args:
-            batch (BaseDataInstanceType): The input batch.
+            batch (BaseDataInstance): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             training_engine (Optional[Engine]): The training engine instance.
             **kwargs: Additional arguments.

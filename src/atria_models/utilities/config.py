@@ -5,12 +5,13 @@ from hydra_zen import builds
 from omegaconf import OmegaConf
 
 
-def setup_model_config(attr_name="_config"):
+def setup_model_config(attr_name="config"):
     def decorator(cls):
         original_init = cls.__init__
 
         @functools.wraps(original_init)
         def wrapped_init(self, *args, **kwargs):
+            print("Calling wrapped_init for", cls.__name__, type(self), cls)
             if type(self) is cls:
                 sig = inspect.signature(original_init)
                 bound = sig.bind(self, *args, **kwargs)
@@ -19,14 +20,17 @@ def setup_model_config(attr_name="_config"):
                 # Build config dict (excluding 'self')
                 config = {k: v for k, v in bound.arguments.items() if k != "self"}
 
+                # flatten all kwargs
+                if "model_kwargs" in config:
+                    config.update(config["model_kwargs"])
+                    del config["model_kwargs"]
+
                 # Convert AtriaModel instances to their config
                 setattr(
                     self,
                     attr_name,
-                    OmegaConf.to_container(
-                        OmegaConf.create(
-                            builds(cls, populate_full_signature=True, **config)
-                        )
+                    OmegaConf.create(
+                        builds(cls, populate_full_signature=True, **config)
                     ),
                 )
 
@@ -39,7 +43,7 @@ def setup_model_config(attr_name="_config"):
     return decorator
 
 
-def setup_model_pipeline_config(attr_name="_config"):
+def setup_model_pipeline_config(attr_name="config"):
     def decorator(cls):
         original_init = cls.__init__
 
@@ -56,12 +60,18 @@ def setup_model_pipeline_config(attr_name="_config"):
                 for k, v in bound.arguments.items():
                     if k == "self":
                         continue
-                    if isinstance(v, dict) and all(
-                        isinstance(item, AtriaModel) for item in v.values()
-                    ):
-                        config[k] = {k: v._config for k, v in v.items()}
-                    elif isinstance(v, AtriaModel):
-                        config[k] = v._config
+                    if k == "model":
+                        if isinstance(v, dict) and all(
+                            isinstance(item, AtriaModel) for item in v.values()
+                        ):
+                            config[k] = {k: v.config for k, v in v.items()}
+                        elif isinstance(v, AtriaModel):
+                            config[k] = v.config
+                    elif k == "runtime_transforms":
+                        config[k] = {
+                            "train": v.train.config if v.train else None,
+                            "evaluation": v.evaluation.config if v.evaluation else None,
+                        }
                     else:
                         config[k] = v
 
@@ -69,10 +79,8 @@ def setup_model_pipeline_config(attr_name="_config"):
                 setattr(
                     self,
                     attr_name,
-                    OmegaConf.to_container(
-                        OmegaConf.create(
-                            builds(cls, populate_full_signature=True, **config)
-                        )
+                    OmegaConf.create(
+                        builds(cls, populate_full_signature=True, **config)
                     ),
                 )
 

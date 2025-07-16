@@ -27,6 +27,7 @@ from torch.nn import Module
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.registry import MODEL
+from atria_models.utilities.config import setup_model_config
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,7 @@ logger = get_logger(__name__)
     "timm",
     model_name_pattern="${.model_name}",  # take the model name from the relative '_here_' config
 )
+@setup_model_config()
 class TimmModel(AtriaModel):
     """
     A model constructor for `timm` models.

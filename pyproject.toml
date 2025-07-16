@@ -12,14 +12,15 @@ license = { file = "LICENSE.txt" }
 authors = [{ name = "Saifullah", email = "saifullah.saifullah@dfki.de" }]
 dependencies = [
     "atria-core[torch-gpu]",
-    "atria-datasets",
     "atria-hub[torch-gpu]",
     "atria-registry[torch-gpu]",
+    "atria-transforms",
     "diffusers>=0.34.0",
     "mmcv==2.1.0",
     "mmdet==3.3.0",
     "pytorch-ignite>=0.5.2",
     "timm>=1.0.17",
+    "torchinfo>=1.8.0",
     "transformers>=4.37.0",
 ]
 
@@ -118,8 +119,8 @@ mmcv = { url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2
 datadings = { git = "https://github.com/saifullah3396/datadings.git" }
 atria-registry = { path = "../atria_registry", editable = true }
 atria-core = { path = "../atria_core", editable = true }
-atria-hub = { path = "../atria_hub" }
-atria-datasets = { path = "../atria_datasets", editable = true }
+atria-hub = { path = "../atria_hub", editable = true }
+atria-transforms = { path = "../atria_transforms", editable = true }
 
 [dependency-groups]
 dev = [
@@ -129,6 +130,7 @@ dev = [
     "pytest>=8.4.1",
     "ruff>=0.12.2",
     "ipykernel>=6.28.1",
+    "openapi-python-client>=0.25.2",
 ]
 
 [tool.mypy]
