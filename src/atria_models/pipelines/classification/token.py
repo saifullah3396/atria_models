@@ -22,13 +22,14 @@ License: MIT
 from typing import Any
 
 import torch
+from atria_transforms.data_types import TokenizedDocumentInstance
+
 from atria_models.core.atria_model import AtriaModel
-from atria_models.outputs import TokenClassificationModelOutput
+from atria_models.data_types.outputs import TokenClassificationModelOutput
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.classification.sequence import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-from atria_transforms.data_types import TokenizedDocumentInstance
 
 
 @MODEL_PIPELINE.register(

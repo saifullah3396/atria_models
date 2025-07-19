@@ -1,7 +1,9 @@
 from atria_registry.module_registry import ModuleRegistry
-from atria_registry.registry_group import RegistryGroup
 
-from atria_models.registry.registry_groups import ModelRegistryGroup
+from atria_models.registry.registry_groups import (
+    ModelPipelineRegistryGroup,
+    ModelRegistryGroup,
+)
 
 _initialized = False
 
@@ -15,5 +17,6 @@ def init_registry():
         name="MODEL", registry_group=ModelRegistryGroup(name="model")
     )
     ModuleRegistry().add_registry_group(
-        name="MODEL_PIPELINE", registry_group=RegistryGroup(name="model_pipeline")
+        name="MODEL_PIPELINE",
+        registry_group=ModelPipelineRegistryGroup(name="model_pipeline"),
     )

@@ -21,6 +21,8 @@ Version: 1.0.0
 License: MIT
 """
 
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from functools import wraps
@@ -38,7 +40,6 @@ from atria_models.utilities.checkpoints import (
     _bytes_to_checkpoint,
     _checkpoint_to_bytes,
 )
-from atria_models.utilities.config import setup_model_pipeline_config
 
 if TYPE_CHECKING:
     import torch
@@ -47,13 +48,12 @@ if TYPE_CHECKING:
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
 
-    from atria_models.outputs import ModelOutput
+    from atria_models.data_types.outputs import ModelOutput
     from atria_models.utilities.nn_modules import AtriaModelDict
 
 logger = get_logger(__name__)
 
 
-@setup_model_pipeline_config()
 class AtriaModelPipeline(ABC):
     """
     Abstract base class for task-specific PyTorch models.
@@ -74,7 +74,7 @@ class AtriaModelPipeline(ABC):
         self,
         model: AtriaModel | dict[str, AtriaModel],
         checkpoint_configs: list[CheckpointConfig] | None = None,
-        runtime_transforms: DataTransformsDict | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
     ):
         """
         Initializes the AtriaModelPipeline instance.
@@ -133,6 +133,29 @@ class AtriaModelPipeline(ABC):
         cls.evaluation_step = wrapped_evaluation_step
         cls.predict_step = wrapped_predict_step
         cls.visualization_step = wrapped_visualization_step
+
+    @property
+    def config_hash(self) -> str:
+        """
+        Hash of the dataset configuration for versioning.
+
+        Returns:
+            8-character hash string based on configuration content
+        """
+        config_dict = OmegaConf.to_container(self.config, resolve=True)
+        config_dict.pop("_target_", None)
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()[:8]
+
+    @property
+    def task_type(self) -> TaskType:
+        """
+        Returns the task type of the model pipeline
+
+        Returns:
+            TaskType: The task type.
+        """
+        return self._TASK_TYPE
 
     @property
     def model_name(self) -> str:
@@ -214,7 +237,7 @@ class AtriaModelPipeline(ABC):
 
     def build(
         self,
-        dataset_metadata: Optional["DatasetMetadata"] = None,
+        dataset_metadata: Optional["DatasetMetadata"],
         tb_logger: Optional["TensorboardLogger"] = None,
     ) -> None:
         """
@@ -459,13 +482,14 @@ class AtriaModelPipeline(ABC):
         )
 
         # initialize the AtriaHub client
-        hub = AtriaHub()
+        hub = AtriaHub().initialize()
 
         # create a new model in the hub or get the existing one
         model = hub.models.get_or_create(
+            username=hub.auth.username,
             name=name,
             description=description,
-            task_type=self._TASK_TYPE,
+            task_type=self.task_type,
             is_public=is_public,
         )
 
@@ -478,29 +502,87 @@ class AtriaModelPipeline(ABC):
         )
 
     @classmethod
-    def load_from_hub(cls, name: str, branch: str = "main"):
+    def load_from_registry(
+        cls,
+        pipeline_name: str,
+        model_name: str,
+        dataset_metadata: "DatasetMetadata",
+        provider: str = "atria",
+        overrides: list[str] | None = None,
+        tb_logger: Optional["TensorboardLogger"] = None,
+    ) -> "AtriaModelPipeline":
+        """
+        Loads a model pipeline from the registry.
+
+        Args:
+            name (str): The name of the model pipeline.
+            branch (str): The branch to load the model from.
+            override_config (dict | None): Optional configuration overrides.
+
+        Returns:
+            AtriaModelPipeline: The loaded model pipeline instance.
+        """
+        from atria_models.registry import MODEL_PIPELINE
+
+        overrides = overrides or []
+        model_pipeline: AtriaModelPipeline = MODEL_PIPELINE.load_from_registry(
+            pipeline_name,
+            provider=provider,
+            overrides=[f"model_pipeline.model.model_name={model_name}"] + overrides,
+        )
+        return model_pipeline.build(
+            dataset_metadata=dataset_metadata, tb_logger=tb_logger
+        )
+
+    @classmethod
+    def _validate_model_name(cls, name: str) -> tuple[str, str, str | None]:
+        if "/" not in name:
+            raise ValueError(
+                f"Invalid model name format: {name}. "
+                "Expected format is 'username/model_name' or 'username/model_name/branch'."
+            )
+
+        parts = name.split("/")
+        if len(parts) == 2:
+            return parts[0], parts[1], None
+        elif len(parts) == 3:
+            return parts[0], parts[1], parts[2]
+        else:
+            raise ValueError(
+                f"Invalid model name format: {name}. "
+                "Expected format is 'username/model_name' or 'username/model_name/branch'."
+            )
+
+    @classmethod
+    def load_from_hub(
+        cls, name: str, override_config: dict | None = None
+    ) -> "AtriaModelPipeline":
         try:
             import atria_hub  # noqa: F401
         except ImportError:
             raise ImportError(
-                "The 'atria_hub' package is required to load datasets from the hub. "
+                "The 'atria_hub' package is required to load models from the hub. "
                 "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
             )
 
         from atria_hub.hub import AtriaHub
 
-        logger.info(f"Loading model {name}/{branch} from hub.")
+        # validate the model name format
+        username, name, branch = cls._validate_model_name(name)
+
+        logger.info(f"Loading model {username}/{name}/{branch} from hub.")
 
         # initialize the AtriaHub client
-        hub = AtriaHub()
+        hub = AtriaHub().initialize()
 
         # create a new model in the hub or get the existing one
-        model = hub.models.get(name=name)
+        model = hub.models.get_by_name(username=username, name=name)
 
         # upload the model checkpoint to the hub at the specified branch
-        checkpoint = _bytes_to_checkpoint(
-            hub.models.load_checkpoint(model=model, branch=branch)
+        checkpoint, config = hub.models.load_checkpoint_and_config(
+            model_repo_id=model.repo_id, branch=branch
         )
+        checkpoint = _bytes_to_checkpoint(checkpoint)
 
         # first we get the model config
         config = checkpoint.pop("config", None)
@@ -509,7 +591,9 @@ class AtriaModelPipeline(ABC):
                 "The model checkpoint does not contain a 'config' key. "
                 "Please ensure the model was saved with the configuration."
             )
-        model: AtriaModelPipeline = _instantiate_object_from_config(config)
+        model: AtriaModelPipeline = _instantiate_object_from_config(
+            config, override_config
+        )
         return model.build_from_checkpoint(checkpoint)
 
     def _transform_batch(
@@ -527,6 +611,11 @@ class AtriaModelPipeline(ABC):
             else self._runtime_transforms.evaluation
         )
         if self._apply_runtime_transforms:
+            if transform is None:
+                raise ValueError(
+                    "You have enabled runtime transforms, but no transform is defined "
+                    f"for {transform_type} type. Please define a transform in the model pipeline."
+                )
             assert isinstance(batch, list) and not any(x.is_batched for x in batch), (
                 "Batch must be a list of untransformed BaseDataInstance when applying runtime transforms."
             )

@@ -30,11 +30,10 @@ from atria_models.core.atria_model import AtriaModel
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-from atria_models.utilities.config import setup_model_pipeline_config
 from atria_models.utilities.nn_modules import AtriaModelDict, _get_logits_from_output
 
 if TYPE_CHECKING:
-    from atria_models.outputs import ClassificationModelOutput
+    from atria_models.data_types.outputs import ClassificationModelOutput
 
 SupportedBatchDataTypes = DocumentInstance | ImageInstance
 
@@ -76,7 +75,6 @@ class MixupConfig:
         {"/data_transform@runtime_transforms.evaluation": "image/default"},
     ],
 )
-@setup_model_pipeline_config()
 class ImageClassificationPipeline(ClassificationPipeline):
     """
     A pipeline for image classification tasks.
@@ -128,7 +126,7 @@ class ImageClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output containing loss, logits, and labels.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         if self._mixup is not None:
             batch.image.content, batch.gt.classification.label.value = self._mixup(

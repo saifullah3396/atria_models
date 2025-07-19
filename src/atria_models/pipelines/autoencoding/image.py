@@ -31,7 +31,7 @@ from ignite.contrib.handlers import TensorboardLogger
 from ignite.engine import Engine
 
 from atria_models.core.atria_model import AtriaModel
-from atria_models.outputs import AutoEncoderModelOutput, ModelOutput
+from atria_models.data_types.outputs import AutoEncoderModelOutput, ModelOutput
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
 from atria_models.utilities.checkpoints import CheckpointConfig
 from atria_models.utilities.nn_modules import _unnormalize_image

@@ -22,13 +22,14 @@ License: MIT
 
 from typing import TYPE_CHECKING, Any
 
+from atria_transforms.data_types import TokenizedDocumentInstance
+
 from atria_models.core.atria_model import AtriaModel
-from atria_models.outputs import SequenceQAModelOutput
+from atria_models.data_types.outputs import SequenceQAModelOutput
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
 from atria_models.pipelines.classification.sequence import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-from atria_transforms.data_types import TokenizedDocumentInstance
 
 if TYPE_CHECKING:
     import torch

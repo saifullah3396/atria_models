@@ -22,15 +22,16 @@ License: MIT
 import enum
 from typing import TYPE_CHECKING, Any
 
+from atria_transforms.data_types import TokenizedDocumentInstance
+
 from atria_models.core.atria_model import AtriaModel
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
 from atria_models.utilities.nn_modules import _get_logits_from_output
-from atria_transforms.data_types import TokenizedDocumentInstance
 
 if TYPE_CHECKING:
-    from atria_models.outputs import ClassificationModelOutput
+    from atria_models.data_types.outputs import ClassificationModelOutput
 
 
 class OverflowStrategy(enum.Enum):
@@ -102,7 +103,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         if self._training_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
@@ -128,7 +129,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
@@ -154,7 +155,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()

@@ -26,9 +26,7 @@ License: MIT
 
 from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
 from atria_core.logger import get_logger
-from atria_core.utilities.common import _get_possible_args
 from atria_core.utilities.imports import _resolve_module_from_path
-from diffusers.models import AutoencoderKL
 from torch.nn import Module
 
 from atria_models.core.atria_model import AtriaModel
@@ -51,7 +49,6 @@ class DiffusersModel(AtriaModel):
 
     Attributes:
         model_name (str): The name of the model to be constructed.
-        num_labels (Optional[int]): The number of output labels for the model.
         model_cache_dir (Optional[str]): The directory where the model weights are stored.
         pretrained (bool): Whether to load pretrained weights.
         convert_bn_to_gn (bool): Whether to convert BatchNorm layers to GroupNorm layers.
@@ -63,7 +60,6 @@ class DiffusersModel(AtriaModel):
     def __init__(
         self,
         model_name: str,
-        num_labels: int | None = None,
         model_cache_dir: str | None = None,
         convert_bn_to_gn: bool = False,
         is_frozen: bool = False,
@@ -77,7 +73,6 @@ class DiffusersModel(AtriaModel):
 
         Args:
             model_name (str): The name of the model to be constructed.
-            num_labels (Optional[int], optional): The number of output labels for the model. Defaults to None.
             model_cache_dir (Optional[str], optional): The directory where the model weights are stored. Defaults to None.
             pretrained (bool, optional): Whether to load pretrained weights. Defaults to True.
             convert_bn_to_gn (bool, optional): Whether to convert BatchNorm layers to GroupNorm layers. Defaults to False.
@@ -86,11 +81,10 @@ class DiffusersModel(AtriaModel):
             unfrozen_keys_patterns (Optional[List[str]], optional): Patterns to unfreeze model layers. Defaults to None.
             **model_kwargs: Additional keyword arguments for the model.
         """
-        self._model_name = model_name
-        self._num_labels = num_labels
         self._model_cache_dir = model_cache_dir or _DEFAULT_ATRIA_MODELS_CACHE_DIR
 
         super().__init__(
+            model_name=model_name,
             convert_bn_to_gn=convert_bn_to_gn,
             is_frozen=is_frozen,
             frozen_keys_patterns=frozen_keys_patterns,
@@ -125,59 +119,7 @@ class DiffusersModel(AtriaModel):
             logger.exception(f"Error loading model class {self._model_name}: {e}")
             raise
 
-    def _filter_unused_kwargs(self, model_class):
-        """
-        Filter out unused keyword arguments for the model class.
-
-        Args:
-            model_class (type): The class of the model being constructed.
-        """
-        possible_args = _get_possible_args(model_class)
-        leftover_args = set(self._model_kwargs.keys()) - set(possible_args)
-
-        if leftover_args:
-            logger.warning(
-                f"The following parameters are not used in model initialization: {leftover_args}"
-            )
-
-        self._model_kwargs = {
-            k: v for k, v in self._model_kwargs.items() if k in possible_args
-        }
-
-    def _initialize_model(self, model_class, pretrained: bool = True):
-        """
-        Initialize the model using the resolved model class.
-
-        Args:
-            model_class (type): The class of the model being constructed.
-
-        Returns:
-            Module: The initialized model.
-        """
-        model_config_name_or_path = self._model_kwargs.pop(
-            "model_config_name_or_path", None
-        )
-
-        if model_config_name_or_path:
-            if pretrained:
-                additional_kwargs = {}
-
-                if issubclass(model_class, AutoencoderKL):
-                    additional_kwargs["subfolder"] = "vae"
-
-                return model_class.from_pretrained(
-                    model_config_name_or_path,
-                    cache_dir=self._model_cache_dir,
-                    **self._model_kwargs,
-                    **additional_kwargs,
-                )
-            else:
-                config = model_class.load_config(model_config_name_or_path)
-                return model_class.from_config(config)
-        else:
-            return model_class(**self._model_kwargs)
-
-    def _build(self, **kwargs) -> Module:
+    def _build(self, pretrained: bool = True, **kwargs) -> Module:
         """
         Build the Diffusers model.
 
@@ -188,15 +130,22 @@ class DiffusersModel(AtriaModel):
             Module: The constructed Diffusers model.
         """
         model_class = self._resolve_model_class()
+        model_config_name_or_path = kwargs.pop("model_config_name_or_path", None)
+        if model_config_name_or_path:
+            if pretrained:
+                logger.info(
+                    f"Initializing model [{model_class}] with the following parameters:"
+                )
+                logger.info(kwargs)
 
-        self._filter_unused_kwargs(model_class)
-
-        logger.info(
-            f"Initializing model [{model_class}] with the following parameters:"
-        )
-        logger.info(self._model_kwargs)
-
-        return self._initialize_model(model_class)
+                return model_class.from_pretrained(
+                    model_config_name_or_path, cache_dir=self._model_cache_dir, **kwargs
+                )
+            else:
+                config = model_class.load_config(model_config_name_or_path)
+                return model_class.from_config(config)
+        else:
+            return model_class(**kwargs)
 
 
 @MODEL.register("diffusers/autoencoder")
@@ -208,7 +157,7 @@ class DiffusersAutoencoderModel(DiffusersModel):
     such as `AutoencoderKL` from the Diffusers library.
     """
 
-    def _build(self) -> Module:
+    def _build(self, **kwargs) -> Module:
         """
         Build the autoencoder model.
 
@@ -218,7 +167,7 @@ class DiffusersAutoencoderModel(DiffusersModel):
             Module: The constructed autoencoder model.
         """
         assert self._model_name in ["AutoencoderKL"]
-        super()._build()
+        super()._build(subfolder="vae", **kwargs)
 
 
 @MODEL.register("diffusers/diffusion_model")
@@ -230,7 +179,7 @@ class DiffusersDiffusionModel(DiffusersModel):
     such as `UNet2DModel` and `UNet2DConditionModel` from the Diffusers library.
     """
 
-    def _build(self) -> Module:
+    def _build(self, **kwargs) -> Module:
         """
         Build the diffusion model.
 
@@ -240,4 +189,4 @@ class DiffusersDiffusionModel(DiffusersModel):
             Module: The constructed diffusion model.
         """
         assert self._model_name in ["UNet2DModel", "UNet2DConditionModel"]
-        super()._build()
+        super()._build(**kwargs)

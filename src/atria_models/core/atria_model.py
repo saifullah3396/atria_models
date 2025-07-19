@@ -24,11 +24,9 @@ from abc import abstractmethod
 from typing import Any
 
 from atria_core.logger.logger import get_logger
-from atria_registry.registry_config_mixin import RegistryConfigMixin
 from torch.nn import Module
 
 from atria_models.utilities.checkpoints import CheckpointManager
-from atria_models.utilities.config import setup_model_config
 from atria_models.utilities.nn_modules import (
     _batch_norm_to_group_norm,
     _freeze_layers_with_key_pattern,
@@ -37,7 +35,6 @@ from atria_models.utilities.nn_modules import (
 logger = get_logger(__name__)
 
 
-@setup_model_config()
 class AtriaModel(Module):
     """
     Base class for all Atria models.
@@ -46,6 +43,7 @@ class AtriaModel(Module):
     It includes support for freezing layers and converting BatchNorm layers to GroupNorm layers.
 
     Attributes:
+        model_name (str): The name of the model class.
         convert_bn_to_gn (bool): Whether to convert BatchNorm layers to GroupNorm layers.
         is_frozen (bool): Whether the model is frozen.
         frozen_keys_patterns (Optional[List[str]]): Patterns for freezing specific layers.
@@ -55,6 +53,7 @@ class AtriaModel(Module):
 
     def __init__(
         self,
+        model_name: str,
         convert_bn_to_gn: bool = False,
         is_frozen: bool = False,
         frozen_keys_patterns: list[str] | None = None,
@@ -75,15 +74,7 @@ class AtriaModel(Module):
         """
 
         Module.__init__(self)
-        RegistryConfigMixin.__init__(
-            self,
-            convert_bn_to_gn=convert_bn_to_gn,
-            is_frozen=is_frozen,
-            frozen_keys_patterns=frozen_keys_patterns,
-            unfrozen_keys_patterns=unfrozen_keys_patterns,
-            pretrained_checkpoint=pretrained_checkpoint,
-            **model_kwargs,
-        )
+        self._model_name = model_name
         self._convert_bn_to_gn = convert_bn_to_gn
         self._is_frozen = is_frozen
         self._frozen_keys_patterns = frozen_keys_patterns
@@ -100,7 +91,7 @@ class AtriaModel(Module):
         Returns:
             str: The name of the model class.
         """
-        return self.__class__.__name__
+        return self.model_name
 
     @property
     def is_frozen(self) -> bool:

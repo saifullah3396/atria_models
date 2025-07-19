@@ -84,10 +84,10 @@ class TorchVisionModelBuilder(AtriaModel):
             unfrozen_keys_patterns (Optional[List[str]]): Patterns for keys to unfreeze.
             model_kwargs (dict): Additional keyword arguments for model initialization.
         """
-        self._model_name = model_name
         self._model_cache_dir = model_cache_dir or _DEFAULT_ATRIA_MODELS_CACHE_DIR
 
         super().__init__(
+            model_name=model_name,
             convert_bn_to_gn=convert_bn_to_gn,
             is_frozen=is_frozen,
             frozen_keys_patterns=frozen_keys_patterns,
@@ -95,16 +95,6 @@ class TorchVisionModelBuilder(AtriaModel):
             pretrained_checkpoint=pretrained_checkpoint,
             **model_kwargs,
         )
-
-    @property
-    def model_name(self) -> str:
-        """
-        Returns the name of the TorchVision model.
-
-        Returns:
-            str: The name of the model.
-        """
-        return self._model_name
 
     def _build(self, *, num_labels: int | None = None, **kwargs) -> Module:
         """

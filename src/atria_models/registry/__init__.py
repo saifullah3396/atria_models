@@ -32,10 +32,12 @@ License: MIT
 """
 
 from atria_registry import ModuleRegistry
-from atria_registry.registry_group import RegistryGroup
 
 from atria_models.registry.module_registry import init_registry
-from atria_models.registry.registry_groups import ModelRegistryGroup
+from atria_models.registry.registry_groups import (
+    ModelPipelineRegistryGroup,
+    ModelRegistryGroup,
+)
 
 init_registry()
 
@@ -47,7 +49,7 @@ pre-trained models. This registry allows for easy retrieval and management of
 model classes throughout the application.
 """
 
-MODEL_PIPELINE: RegistryGroup = ModuleRegistry().MODEL_PIPELINE
+MODEL_PIPELINE: ModelPipelineRegistryGroup = ModuleRegistry().MODEL_PIPELINE
 """Registry group for model pipelines.
 Used to register and manage model pipelines, which are sequences of models
 that process data in stages. This registry allows for easy retrieval and management

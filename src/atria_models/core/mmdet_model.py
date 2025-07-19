@@ -92,7 +92,6 @@ class MMDetModel(AtriaModel):
             unfrozen_keys_patterns (Optional[List[str]], optional): Patterns to unfreeze model layers. Defaults to None.
             **model_kwargs: Additional keyword arguments for the model.
         """
-        self._model_name = model_name
         self._model_cache_dir = model_cache_dir or _DEFAULT_ATRIA_MODELS_CACHE_DIR
 
         if model_search_paths is not None:
@@ -118,6 +117,7 @@ class MMDetModel(AtriaModel):
             self._resolved_model_search_paths = [_DEFAULT_MMDET_CONFIG_PATH]
 
         super().__init__(
+            model_name=model_name,
             convert_bn_to_gn=convert_bn_to_gn,
             is_frozen=is_frozen,
             frozen_keys_patterns=frozen_keys_patterns,
@@ -126,17 +126,7 @@ class MMDetModel(AtriaModel):
             **model_kwargs,
         )
 
-    @property
-    def model_name(self) -> str:
-        """
-        Get the name of the model.
-
-        Returns:
-            str: The name of the model.
-        """
-        return self._model_name
-
-    def _build(self, *, num_labels: int | None = None, **kwargs) -> "BaseDetector":
+    def _build(self, **kwargs) -> "BaseDetector":
         """
         Constructs the MMDetection model based on the provided configuration.
 

@@ -11,7 +11,6 @@ def setup_model_config(attr_name="config"):
 
         @functools.wraps(original_init)
         def wrapped_init(self, *args, **kwargs):
-            print("Calling wrapped_init for", cls.__name__, type(self), cls)
             if type(self) is cls:
                 sig = inspect.signature(original_init)
                 bound = sig.bind(self, *args, **kwargs)

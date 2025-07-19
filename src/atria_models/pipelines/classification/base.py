@@ -13,7 +13,7 @@ Dependencies:
     - torch: For PyTorch operations.
     - atria_core.logger: For logging utilities.
     - atria_models.utilities: For neural network utilities.
-    - atria_models.outputs: For model output structures.
+    - atria_models.data_types.outputs: For model output structures.
 
 Author: Your Name (your.email@example.com)
 Date: 2025-04-07
@@ -32,7 +32,7 @@ from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
 from atria_models.utilities.nn_modules import AtriaModelDict, _get_logits_from_output
 
 if TYPE_CHECKING:
-    from atria_models.outputs import ClassificationModelOutput
+    from atria_models.data_types.outputs import ClassificationModelOutput
 
 logger = get_logger(__name__)
 
@@ -64,7 +64,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_train(logits, batch.gt.classification.label.value)
@@ -85,7 +85,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_eval(logits, batch.gt.classification.label.value)
@@ -106,7 +106,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
-        from atria_models.outputs import ClassificationModelOutput
+        from atria_models.data_types.outputs import ClassificationModelOutput
 
         logits = _get_logits_from_output(self._model_forward(batch))
         return ClassificationModelOutput(

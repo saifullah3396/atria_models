@@ -3,14 +3,15 @@ from pathlib import Path
 
 from atria_core.logger.logger import get_logger
 from atria_core.types import TrainingStage
-from atria_models.core.atria_model import AtriaModel
-from atria_models.outputs import MMDetEvaluationOutput, MMDetTrainingOutput
-from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
-from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
 from atria_transforms.core.mmdet import MMDetInput
 from ignite.engine import Engine
 from pydantic import Field
+
+from atria_models.core.atria_model import AtriaModel
+from atria_models.data_types.outputs import MMDetEvaluationOutput, MMDetTrainingOutput
+from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
+from atria_models.registry import MODEL_PIPELINE
+from atria_models.utilities.checkpoints import CheckpointConfig
 
 logger = get_logger(__name__)
 
