@@ -21,10 +21,9 @@ License: MIT
 
 import json
 from abc import abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from atria_core.logger.logger import get_logger
-from torch.nn import Module
 
 from atria_models.utilities.checkpoints import CheckpointManager
 from atria_models.utilities.nn_modules import (
@@ -32,10 +31,13 @@ from atria_models.utilities.nn_modules import (
     _freeze_layers_with_key_pattern,
 )
 
+if TYPE_CHECKING:
+    from torch import nn
+
 logger = get_logger(__name__)
 
 
-class AtriaModel(Module):
+class AtriaModel:
     """
     Base class for all Atria models.
 
@@ -73,14 +75,12 @@ class AtriaModel(Module):
             **model_kwargs: Additional keyword arguments for model configuration.
         """
 
-        Module.__init__(self)
         self._model_name = model_name
         self._convert_bn_to_gn = convert_bn_to_gn
         self._is_frozen = is_frozen
         self._frozen_keys_patterns = frozen_keys_patterns
         self._unfrozen_keys_patterns = unfrozen_keys_patterns
         self._pretrained_checkpoint = pretrained_checkpoint
-        self._model: Module = None
         self._model_kwargs = model_kwargs
 
     @property
@@ -103,7 +103,7 @@ class AtriaModel(Module):
         """
         return self._is_frozen
 
-    def _validate_model(self, model: Any) -> Module:
+    def _validate_model(self, model: Any) -> "nn.Module":
         """
         Validate the model after building it.
 
@@ -116,6 +116,7 @@ class AtriaModel(Module):
         Raises:
             ValueError: If the model is not a valid PyTorch module.
         """
+        from torch.nn import Module
 
         if not isinstance(model, Module):
             raise ValueError(
@@ -163,7 +164,7 @@ class AtriaModel(Module):
                     f"Trainable parameters: {json.dumps(trainable_params, indent=2)}"
                 )
 
-    def build(self, **kwargs) -> "AtriaModel":
+    def build(self, **kwargs) -> "nn.Module":
         """
         Build the model by calling the abstract method `_build`.
 
@@ -171,24 +172,22 @@ class AtriaModel(Module):
             **kwargs: Additional keyword arguments for model building.
 
         Returns:
-            AtriaModel: The built Atria model instance.
+            torch.Module: The built PyTorch model.
         """
-        self._model = self._validate_model(
-            self._build(**{**self._model_kwargs, **kwargs})
-        )
+        model = self._validate_model(self._build(**{**self._model_kwargs, **kwargs}))
         if self._pretrained_checkpoint is not None:
             checkpoint = CheckpointManager._load_checkpoint_from_path_or_url(
                 self._pretrained_checkpoint
             )
             CheckpointManager._apply_checkpoint_to_model(
-                self._model, checkpoint, strict=False
+                model, checkpoint, strict=False
             )
         self._configure_batch_norm_layers()
         self._configure_model_frozen_layers()
-        return self
+        return model
 
     @abstractmethod
-    def _build(self, **kwargs) -> Module:
+    def _build(self, **kwargs) -> "nn.Module":
         """
         Abstract method to initialize the model. Must be implemented by subclasses.
 
@@ -204,16 +203,3 @@ class AtriaModel(Module):
         raise NotImplementedError(
             "Subclasses must implement the _build method to initialize the model."
         )
-
-    def forward(self, *args, **kwargs) -> Any:
-        """
-        Forward pass through the model.
-
-        Args:
-            *args: Positional arguments for the model's forward method.
-            **kwargs: Keyword arguments for the model's forward method.
-
-        Returns:
-            Any: The output of the model.
-        """
-        return self._model(*args, **kwargs)

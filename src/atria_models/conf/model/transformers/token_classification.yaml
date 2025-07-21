@@ -1,5 +1,5 @@
 _target_: hydra_zen.funcs.zen_processing
-_zen_target: atria_models.core.transformers_model.TokenClassificationTransformersModel
+_zen_target: atria_models.core.transformers_model.TokenClassificationModel
 _zen_partial: false
 _zen_exclude:
 - name

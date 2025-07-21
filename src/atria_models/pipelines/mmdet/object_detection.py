@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from atria_core.logger.logger import get_logger
+from atria_core.transforms import DataTransformsDict
 from atria_core.types import TrainingStage
 from atria_transforms.core.mmdet import MMDetInput
 from ignite.engine import Engine
@@ -9,7 +10,10 @@ from pydantic import Field
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.data_types.outputs import MMDetEvaluationOutput, MMDetTrainingOutput
-from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
+from atria_models.pipelines.atria_model_pipeline import (
+    AtriaModelPipeline,
+    MetricInitializer,
+)
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
 
@@ -29,7 +33,9 @@ class TestTimeAugmentationConfig:
 
 
 @MODEL_PIPELINE.register(
-    "object_detection", hydra_defaults=["_self_", {"/model@model": "mmdet"}]
+    "object_detection",
+    hydra_defaults=["_self_", {"/model@model": "mmdet"}],
+    metrics=[MetricInitializer(name="cocoeval")],
 )
 class ObjectDetectionPipeline(AtriaModelPipeline):
     """
@@ -48,6 +54,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         self,
         model: AtriaModel | dict[str, AtriaModel],
         checkpoint_configs: list[CheckpointConfig] | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
         requires_test_time_aug: bool = False,
         test_time_aug_config: TestTimeAugmentationConfig
         | None = TestTimeAugmentationConfig(),
@@ -64,7 +72,12 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         self._requires_test_time_augmentation = requires_test_time_aug
         self._test_time_aug_config = test_time_aug_config
 
-        super().__init__(model=model, checkpoint_configs=checkpoint_configs)
+        super().__init__(
+            model=model,
+            checkpoint_configs=checkpoint_configs,
+            metrics=metrics,
+            runtime_transforms=runtime_transforms,
+        )
 
     def _build_model(self):
         from mmdet.models.detectors import BaseDetector

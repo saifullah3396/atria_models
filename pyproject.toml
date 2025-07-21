@@ -13,6 +13,7 @@ authors = [{ name = "Saifullah", email = "saifullah.saifullah@dfki.de" }]
 dependencies = [
     "atria-core[torch-gpu]",
     "atria-hub[torch-gpu]",
+    "atria-metrics",
     "atria-registry[torch-gpu]",
     "atria-transforms",
     "diffusers>=0.34.0",
@@ -121,6 +122,7 @@ atria-registry = { path = "../atria_registry", editable = true }
 atria-core = { path = "../atria_core", editable = true }
 atria-hub = { path = "../atria_hub", editable = true }
 atria-transforms = { path = "../atria_transforms", editable = true }
+atria-metrics = { path = "../atria_metrics", editable = true }
 
 [dependency-groups]
 dev = [

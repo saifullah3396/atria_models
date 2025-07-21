@@ -14,9 +14,14 @@ def init_registry():
         return
     _initialized = True
     ModuleRegistry().add_registry_group(
-        name="MODEL", registry_group=ModelRegistryGroup(name="model")
+        name="MODEL",
+        registry_group=ModelRegistryGroup(
+            name="model", default_provider="atria_models"
+        ),
     )
     ModuleRegistry().add_registry_group(
         name="MODEL_PIPELINE",
-        registry_group=ModelPipelineRegistryGroup(name="model_pipeline"),
+        registry_group=ModelPipelineRegistryGroup(
+            name="model_pipeline", default_provider="atria_models"
+        ),
     )

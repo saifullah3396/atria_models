@@ -15,23 +15,26 @@ class ModelRegistryGroup(RegistryGroup):
     """
 
     def register(  # type: ignore[override]
-        self, model_name: str, model_name_pattern: str | None = None, **kwargs
+        self,
+        model_name: str,
+        is_torch_model: bool = False,
+        model_name_pattern: str | None = None,
+        **kwargs,
     ) -> callable:
         """
         Decorator for registering a model.
 
         Args:
             model_name (str): The name of the model.
+            is_nn_model (bool): Whether the model is a PyTorch neural network model. Defaults to False.
             model_name_pattern (str, optional): A pattern for the model name. Defaults to None.
             **kwargs: Additional keyword arguments for the registration.
 
         Returns:
             function: A decorator function for registering the model.
         """
-        import torch
 
         from atria_models.core.atria_model import AtriaModel
-        from atria_models.core.local_model import LocalModel
 
         def decorator(decorated_class):
             module_name = model_name
@@ -48,8 +51,12 @@ class ModelRegistryGroup(RegistryGroup):
                     },
                     **kwargs,
                 )
-            else:
-                assert issubclass(decorated_class, torch.nn.Module), (
+            elif is_torch_model:
+                from torch import nn
+
+                from atria_models.core.local_model import LocalModel
+
+                assert issubclass(decorated_class, nn.Module), (
                     f"Only torch.nn.Module or AtriaModel can be registered. {decorated_class} is not a subclass of torch.nn.Module or AtriaModel."
                 )
                 self.register_modules(
@@ -58,6 +65,10 @@ class ModelRegistryGroup(RegistryGroup):
                     model_class=decorated_class,
                     zen_meta={"name": module_name},
                     **kwargs,
+                )
+            else:
+                raise TypeError(
+                    f"Only AtriaModel or torch.nn.Module can be registered. {decorated_class} is not a subclass of AtriaModel or torch.nn.Module."
                 )
             return setup_model_config()(decorated_class)
 

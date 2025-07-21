@@ -24,15 +24,16 @@ License: MIT
 import hashlib
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union
 
 from atria_core.logger import get_logger
 from atria_core.transforms.base import DataTransformsDict
-from atria_core.types import BaseDataInstance, TaskType, TrainingStage
+from atria_core.types import TrainingStage
 from atria_registry.utilities import _instantiate_object_from_config
 from omegaconf import OmegaConf
+from pydantic import BaseModel, Field
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.utilities.checkpoints import (
@@ -43,7 +44,7 @@ from atria_models.utilities.checkpoints import (
 
 if TYPE_CHECKING:
     import torch
-    from atria_core.types import DatasetMetadata
+    from atria_core.types import BaseDataInstance, DatasetMetadata, TaskType
     from ignite.contrib.handlers import TensorboardLogger
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
@@ -52,6 +53,11 @@ if TYPE_CHECKING:
     from atria_models.utilities.nn_modules import AtriaModelDict
 
 logger = get_logger(__name__)
+
+
+class MetricInitializer(BaseModel):
+    name: str
+    kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
 class AtriaModelPipeline(ABC):
@@ -68,12 +74,13 @@ class AtriaModelPipeline(ABC):
 
     _REQUIRES_MODEL_DICT: ClassVar[bool] = False
     _REQUIRED_MODEL_KEYS: ClassVar[list[str]] = []
-    _TASK_TYPE: TaskType
+    _TASK_TYPE: "TaskType"
 
     def __init__(
         self,
         model: AtriaModel | dict[str, AtriaModel],
         checkpoint_configs: list[CheckpointConfig] | None = None,
+        metrics: list[MetricInitializer] | None = None,
         runtime_transforms: DataTransformsDict = DataTransformsDict(),
     ):
         """
@@ -86,6 +93,8 @@ class AtriaModelPipeline(ABC):
         self._model = model
         self._checkpoint_configs = checkpoint_configs
         self._runtime_transforms = runtime_transforms
+        self._metrics = metrics or {}
+        self._built_metrics = {}
         self._dataset_metadata = None
         self._tb_logger = None
         self._progress_bar = None
@@ -103,28 +112,36 @@ class AtriaModelPipeline(ABC):
 
         @wraps(original_training_step)
         def wrapped_training_step(
-            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+            self: AtriaModelPipeline,
+            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
             return original_training_step(self, batch, **kwargs)
 
         @wraps(original_evaluation_step)
         def wrapped_evaluation_step(
-            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+            self: AtriaModelPipeline,
+            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
             return original_evaluation_step(self, batch, **kwargs)
 
         @wraps(original_predict_step)
         def wrapped_predict_step(
-            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+            self: AtriaModelPipeline,
+            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
             return original_predict_step(self, batch, **kwargs)
 
         @wraps(original_visualization_step)
         def wrapped_visualization_step(
-            self, batch: BaseDataInstance | list[BaseDataInstance], **kwargs
+            self: AtriaModelPipeline,
+            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
             return original_visualization_step(self, batch, **kwargs)
@@ -148,7 +165,7 @@ class AtriaModelPipeline(ABC):
         return hashlib.sha256(config_str.encode()).hexdigest()[:8]
 
     @property
-    def task_type(self) -> TaskType:
+    def task_type(self) -> "TaskType":
         """
         Returns the task type of the model pipeline
 
@@ -186,6 +203,16 @@ class AtriaModelPipeline(ABC):
             Union[torch.nn.Module, AtriaModelDict]: The PyTorch model.
         """
         return self._model
+
+    @property
+    def metrics(self) -> dict[str, Callable]:
+        """
+        Returns the metrics for the model.
+
+        Returns:
+            dict[str, Callable]: A dictionary of metrics.
+        """
+        return self._built_metrics
 
     @property
     def ema_modules(self) -> Union["torch.nn.Module", dict[str, "torch.nn.Module"]]:
@@ -268,6 +295,8 @@ class AtriaModelPipeline(ABC):
         if idist.get_rank() == 0:
             idist.barrier()
 
+        self._built_metrics = self._build_metrics()
+
         self._is_built = True
 
         return self
@@ -295,25 +324,18 @@ class AtriaModelPipeline(ABC):
         self.load_state_dict(checkpoint)
         return self
 
-    def to_device(self, device: "torch.device", sync_bn: bool = False) -> None:
-        """
-        Moves the model to the specified device.
-
-        Args:
-            device (torch.device): The target device.
-            sync_bn (bool): Whether to synchronize BatchNorm layers across devices. Defaults to False.
-        """
+    def to_device(
+        self, device: Union[str, "torch.device"], sync_bn: bool = False
+    ) -> None:
         from atria_models.utilities.nn_modules import AtriaModelDict, _module_to_device
 
         if isinstance(self._model, AtriaModelDict):
-            logger.info(f"Moving trainable_models to {device}")
             self._model.trainable_models = _module_to_device(
                 self._model.trainable_models,
                 device=device,
                 sync_bn=sync_bn,
                 prepare_for_distributed=True,
             )
-            logger.info(f"Moving non_trainable_models to {device}")
             self._model.non_trainable_models = _module_to_device(
                 self._model.non_trainable_models,
                 device=device,
@@ -321,13 +343,14 @@ class AtriaModelPipeline(ABC):
                 prepare_for_distributed=False,
             )
         else:
-            logger.info(f"Moving model to {device}")
             self._model = _module_to_device(
                 self._model,
                 device=device,
                 sync_bn=sync_bn,
                 prepare_for_distributed=True,
             )
+
+        self._built_metrics = self._build_metrics(device=device)
 
         return self
 
@@ -509,6 +532,7 @@ class AtriaModelPipeline(ABC):
         dataset_metadata: "DatasetMetadata",
         provider: str = "atria",
         overrides: list[str] | None = None,
+        search_pkgs: list[str] | None = None,
         tb_logger: Optional["TensorboardLogger"] = None,
     ) -> "AtriaModelPipeline":
         """
@@ -529,6 +553,7 @@ class AtriaModelPipeline(ABC):
             pipeline_name,
             provider=provider,
             overrides=[f"model_pipeline.model.model_name={model_name}"] + overrides,
+            search_pkgs=search_pkgs,
         )
         return model_pipeline.build(
             dataset_metadata=dataset_metadata, tb_logger=tb_logger
@@ -598,9 +623,9 @@ class AtriaModelPipeline(ABC):
 
     def _transform_batch(
         self,
-        batch: BaseDataInstance | list[BaseDataInstance],
+        batch: Union["BaseDataInstance", list["BaseDataInstance"]],
         transform_type: str = "train",
-    ) -> BaseDataInstance:
+    ) -> "BaseDataInstance":
         """
         Hook to be called before the training step.
         Override this method in subclasses to implement custom behavior.
@@ -626,7 +651,7 @@ class AtriaModelPipeline(ABC):
     @abstractmethod
     def training_step(
         self,
-        batch: BaseDataInstance,
+        batch: "BaseDataInstance",
         training_engine: Optional["Engine"] = None,
         **kwargs,
     ) -> "ModelOutput":
@@ -634,7 +659,7 @@ class AtriaModelPipeline(ABC):
         Defines the training step for the model.
 
         Args:
-            batch (BaseDataInstance): The input batch.
+            batch ("BaseDataInstance"): The input batch.
             training_engine (Optional[Engine]): The training engine instance.
             **kwargs: Additional arguments.
 
@@ -645,7 +670,7 @@ class AtriaModelPipeline(ABC):
     @abstractmethod
     def evaluation_step(
         self,
-        batch: BaseDataInstance,
+        batch: "BaseDataInstance",
         evaluation_engine: Optional["Engine"] = None,
         training_engine: Optional["Engine"] = None,
         stage: TrainingStage = TrainingStage.test,
@@ -655,7 +680,7 @@ class AtriaModelPipeline(ABC):
         Defines the evaluation step for the model.
 
         Args:
-            batch (BaseDataInstance): The input batch.
+            batch ("BaseDataInstance"): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             training_engine (Optional[Engine]): The training engine instance.
             stage (TrainingStage): The current training stage.
@@ -668,7 +693,7 @@ class AtriaModelPipeline(ABC):
     @abstractmethod
     def predict_step(
         self,
-        batch: BaseDataInstance,
+        batch: "BaseDataInstance",
         evaluation_engine: Optional["Engine"] = None,
         **kwargs,
     ) -> "ModelOutput":
@@ -676,7 +701,7 @@ class AtriaModelPipeline(ABC):
         Defines the prediction step for the model.
 
         Args:
-            batch (BaseDataInstance): The input batch.
+            batch ("BaseDataInstance"): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             **kwargs: Additional arguments.
 
@@ -686,7 +711,7 @@ class AtriaModelPipeline(ABC):
 
     def visualization_step(
         self,
-        batch: BaseDataInstance,
+        batch: "BaseDataInstance",
         evaluation_engine: Optional["Engine"] = None,
         training_engine: Optional["Engine"] = None,
         **kwargs,
@@ -695,7 +720,7 @@ class AtriaModelPipeline(ABC):
         Defines the visualization step for the model.
 
         Args:
-            batch (BaseDataInstance): The input batch.
+            batch ("BaseDataInstance"): The input batch.
             evaluation_engine (Optional[Engine]): The evaluation engine instance.
             training_engine (Optional[Engine]): The training engine instance.
             **kwargs: Additional arguments.
@@ -749,6 +774,42 @@ class AtriaModelPipeline(ABC):
             assert isinstance(model, AtriaModel), (
                 f"Expected model type to be {AtriaModel}, but got {type(model)}"
             )
+
+    def _build_metrics(
+        self, device: Union[str, "torch.device"] = "cpu"
+    ) -> dict[str, Callable]:
+        """
+        Builds metrics for the model using the provided metric factory.
+
+        Raises:
+            ValueError: If the metric factory is not a dictionary.
+        """
+        import inspect
+
+        built_metrics = {}
+        for metric_init in self._metrics:
+            from atria_metrics import METRIC
+
+            metric_factory = METRIC.load_from_registry(metric_init.name)
+            possible_args = inspect.signature(metric_factory).parameters
+            kwargs = metric_init.kwargs
+            if "num_classes" in possible_args:
+                assert self._dataset_metadata is not None, (
+                    "Dataset metadata must be provided to determine the number of classes."
+                )
+                assert (
+                    self._dataset_metadata.dataset_labels.classification is not None
+                ), (
+                    f"`instance_classification` dataset labels must be provided for {self.__class__.__name__} "
+                    "to build classification metrics."
+                )
+                kwargs["num_classes"] = len(
+                    self._dataset_metadata.dataset_labels.classification
+                )
+            if "device" in possible_args:
+                kwargs["device"] = device
+            built_metrics[metric_init.name] = metric_factory(**kwargs)
+        return built_metrics
 
     def _build_model(self) -> Union["AtriaModel", "AtriaModelDict"]:
         """

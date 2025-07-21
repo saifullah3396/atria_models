@@ -23,19 +23,23 @@ License: MIT
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
-from atria_core.transforms.base import DataTransformsDict
-from atria_core.types import DocumentInstance, ImageInstance, TaskType
-
+from atria_core.transforms import DataTransformsDict
+from atria_core.types import TaskType
 from atria_models.core.atria_model import AtriaModel
+from atria_models.core.timm_model import TimmModel
+from atria_models.core.torchvision_model import TorchHubModel
+from atria_models.core.transformers_model import ImageClassificationModel
+from atria_models.data_types.outputs import ClassificationModelOutput
+from atria_models.pipelines.atria_model_pipeline import MetricInitializer
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
 from atria_models.utilities.nn_modules import AtriaModelDict, _get_logits_from_output
 
 if TYPE_CHECKING:
-    from atria_models.data_types.outputs import ClassificationModelOutput
+    from atria_core.types import DocumentInstance, ImageInstance
 
-SupportedBatchDataTypes = DocumentInstance | ImageInstance
+SupportedBatchDataTypes = Union["DocumentInstance", "ImageInstance"]
 
 
 @dataclass
@@ -74,6 +78,13 @@ class MixupConfig:
         {"/data_transform@runtime_transforms.train": "image/default"},
         {"/data_transform@runtime_transforms.evaluation": "image/default"},
     ],
+    metrics=[
+        MetricInitializer(name="accuracy"),
+        MetricInitializer(name="precision"),
+        MetricInitializer(name="recall"),
+        MetricInitializer(name="f1_score"),
+        MetricInitializer(name="confusion_matrix"),
+    ],
 )
 class ImageClassificationPipeline(ClassificationPipeline):
     """
@@ -86,16 +97,19 @@ class ImageClassificationPipeline(ClassificationPipeline):
         model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
         checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
         mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
+        runtime_transforms (Optional[DataTransformsDict]): Runtime data transformations.
+        metric_factory (Optional[Dict[str, Callable]]): Factory for metrics.
     """
 
     _TASK_TYPE: TaskType = TaskType.image_classification
 
     def __init__(
         self,
-        model: AtriaModel | dict[str, AtriaModel],
+        model: TimmModel | TorchHubModel | ImageClassificationModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
         mixup_config: MixupConfig | None = None,
-        runtime_transforms: DataTransformsDict | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
     ):
         """
         Initialize the ImageClassificationPipeline.
@@ -104,12 +118,15 @@ class ImageClassificationPipeline(ClassificationPipeline):
             model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
             checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
             mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
+            runtime_transforms (Optional[DataTransformsDict]): Runtime data transformations.
+            metric_factory (Optional[Dict[str, Callable]]): Factory for metrics.
         """
         self._mixup_config = mixup_config
 
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
+            metrics=metrics,
             runtime_transforms=runtime_transforms,
         )
 
@@ -145,9 +162,9 @@ class ImageClassificationPipeline(ClassificationPipeline):
         Returns:
             Union[AtriaModel, AtriaModelDict]: The built model or dictionary of models.
         """
-        import torch
         from timm.data.mixup import Mixup
         from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+        from torch import nn
 
         self._mixup: Mixup = None
         if self._mixup_config is not None:
@@ -165,8 +182,8 @@ class ImageClassificationPipeline(ClassificationPipeline):
                 else SoftTargetCrossEntropy()
             )
         else:
-            self._loss_fn_train = torch.nn.CrossEntropyLoss()
-        self._loss_fn_eval = torch.nn.CrossEntropyLoss()
+            self._loss_fn_train = nn.CrossEntropyLoss()
+        self._loss_fn_eval = nn.CrossEntropyLoss()
 
         return super()._build_model()
 

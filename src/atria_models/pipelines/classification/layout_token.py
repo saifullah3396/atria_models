@@ -19,24 +19,29 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import torch
+from atria_core.transforms import DataTransformsDict
 from atria_transforms.data_types import TokenizedDocumentInstance
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.transformers_model import TokenClassificationModel
 from atria_models.data_types.outputs import LayoutTokenClassificationModelOutput
+from atria_models.pipelines.atria_model_pipeline import MetricInitializer
 from atria_models.pipelines.classification.base import ClassificationPipeline
-from atria_models.pipelines.classification.sequence import OverflowStrategy
+from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-
-if TYPE_CHECKING:
-    import torch
 
 
 @MODEL_PIPELINE.register(
     "layout_token_classification",
     hydra_defaults=["_self_", {"/model@model": "transformers/token_classification"}],
+    metrics=[
+        MetricInitializer(name="layout_precision"),
+        MetricInitializer(name="layout_recall"),
+        MetricInitializer(name="layout_f1"),
+    ],
 )
 class LayoutTokenClassificationPipeline(ClassificationPipeline):
     """
@@ -58,8 +63,10 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
 
     def __init__(
         self,
-        model: AtriaModel | dict[str, AtriaModel],
+        model: TokenClassificationModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
         use_bbox: bool = True,
         use_image: bool = True,
         training_overflow_strategy: OverflowStrategy
@@ -83,7 +90,12 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         self._evaluation_overflow_strategy = evaluation_overflow_strategy
         self._input_stride = input_stride
 
-        super().__init__(model=model, checkpoint_configs=checkpoint_configs)
+        super().__init__(
+            model=model,
+            checkpoint_configs=checkpoint_configs,
+            metrics=metrics,
+            runtime_transforms=runtime_transforms,
+        )
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """

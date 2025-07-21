@@ -19,34 +19,30 @@ Version: 1.0.0
 License: MIT
 """
 
-import enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from atria_core.transforms import DataTransformsDict
 from atria_transforms.data_types import TokenizedDocumentInstance
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.transformers_model import SequenceClassificationModel
+from atria_models.data_types.outputs import ClassificationModelOutput
+from atria_models.pipelines.atria_model_pipeline import MetricInitializer
 from atria_models.pipelines.classification.base import ClassificationPipeline
+from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-from atria_models.utilities.nn_modules import _get_logits_from_output
-
-if TYPE_CHECKING:
-    from atria_models.data_types.outputs import ClassificationModelOutput
-
-
-class OverflowStrategy(enum.Enum):
-    """
-    Enumeration for overflow strategies.
-    """
-
-    select_first = "select_first"
-    select_random = "select_random"
-    select_all = "select_all"
 
 
 @MODEL_PIPELINE.register(
     "sequence_classification",
     hydra_defaults=["_self_", {"/model@model": "transformers/sequence_classification"}],
+    metrics=[
+        MetricInitializer(name="accuracy"),
+        MetricInitializer(name="precision"),
+        MetricInitializer(name="recall"),
+        MetricInitializer(name="f1_score"),
+        MetricInitializer(name="confusion_matrix"),
+    ],
 )
 class SequenceClassificationPipeline(ClassificationPipeline):
     """
@@ -65,8 +61,10 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
     def __init__(
         self,
-        model: AtriaModel | dict[str, AtriaModel],
+        model: SequenceClassificationModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
         use_bbox: bool = True,
         use_image: bool = True,
         training_overflow_strategy: OverflowStrategy
@@ -88,7 +86,12 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         self._training_overflow_strategy = training_overflow_strategy
         self._evaluation_overflow_strategy = evaluation_overflow_strategy
 
-        super().__init__(model=model, checkpoint_configs=checkpoint_configs)
+        super().__init__(
+            model=model,
+            checkpoint_configs=checkpoint_configs,
+            metrics=metrics,
+            runtime_transforms=runtime_transforms,
+        )
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs

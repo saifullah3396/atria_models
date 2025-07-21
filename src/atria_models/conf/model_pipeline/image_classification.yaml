@@ -8,3 +8,23 @@ defaults:
 model: ???
 checkpoint_configs: null
 mixup_config: null
+metrics:
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: accuracy
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: precision
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: recall
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: f1_score
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: confusion_matrix
+  kwargs: {}
+runtime_transforms:
+  _target_: atria_core.transforms.base.DataTransformsDict
+  train: null
+  evaluation: null

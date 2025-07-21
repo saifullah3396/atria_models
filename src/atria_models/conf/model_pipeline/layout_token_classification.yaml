@@ -5,6 +5,20 @@ defaults:
 - /model@model: transformers/token_classification
 model: ???
 checkpoint_configs: null
+metrics:
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: layout_precision
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: layout_recall
+  kwargs: {}
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: layout_f1
+  kwargs: {}
+runtime_transforms:
+  _target_: atria_core.transforms.base.DataTransformsDict
+  train: null
+  evaluation: null
 use_bbox: true
 use_image: true
 training_overflow_strategy: select_random

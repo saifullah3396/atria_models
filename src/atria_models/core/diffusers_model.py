@@ -24,13 +24,17 @@ Version: 1.0.0
 License: MIT
 """
 
+from typing import TYPE_CHECKING
+
 from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
 from atria_core.logger import get_logger
 from atria_core.utilities.imports import _resolve_module_from_path
-from torch.nn import Module
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.registry import MODEL
+
+if TYPE_CHECKING:
+    from torch.nn import Module
 
 logger = get_logger(__name__)
 
@@ -119,7 +123,7 @@ class DiffusersModel(AtriaModel):
             logger.exception(f"Error loading model class {self._model_name}: {e}")
             raise
 
-    def _build(self, pretrained: bool = True, **kwargs) -> Module:
+    def _build(self, pretrained: bool = True, **kwargs) -> "Module":
         """
         Build the Diffusers model.
 
@@ -157,7 +161,7 @@ class DiffusersAutoencoderModel(DiffusersModel):
     such as `AutoencoderKL` from the Diffusers library.
     """
 
-    def _build(self, **kwargs) -> Module:
+    def _build(self, **kwargs) -> "Module":
         """
         Build the autoencoder model.
 
@@ -179,7 +183,7 @@ class DiffusersDiffusionModel(DiffusersModel):
     such as `UNet2DModel` and `UNet2DConditionModel` from the Diffusers library.
     """
 
-    def _build(self, **kwargs) -> Module:
+    def _build(self, **kwargs) -> "Module":
         """
         Build the diffusion model.
 

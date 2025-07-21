@@ -20,11 +20,14 @@ License: MIT
 """
 
 import importlib
+from typing import TYPE_CHECKING
 
 from atria_core.logger import get_logger
-from torch.nn import Module
 
 from atria_models.core.atria_model import AtriaModel
+
+if TYPE_CHECKING:
+    from torch.nn import Module
 
 logger = get_logger(__name__)
 
@@ -38,7 +41,7 @@ class LocalModel(AtriaModel):
     managing frozen layers.
     """
 
-    def _build(self, **kwargs) -> Module:
+    def _build(self, **kwargs) -> "Module":
         if "pretrained" in kwargs:
             kwargs.pop("pretrained")
 

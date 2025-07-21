@@ -5,6 +5,14 @@ defaults:
 - /model@model: mmdet
 model: ???
 checkpoint_configs: null
+metrics:
+- _target_: atria_models.pipelines.atria_model_pipeline.MetricInitializer
+  name: cocoeval
+  kwargs: {}
+runtime_transforms:
+  _target_: atria_core.transforms.base.DataTransformsDict
+  train: null
+  evaluation: null
 requires_test_time_aug: false
 test_time_aug_config:
   _target_: atria_models.pipelines.mmdet.object_detection.TestTimeAugmentationConfig

@@ -20,24 +20,27 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import torch
+from atria_core.transforms import DataTransformsDict
 from atria_transforms.data_types import TokenizedDocumentInstance
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.transformers_model import QuestionAnsweringModel
 from atria_models.data_types.outputs import SequenceQAModelOutput
-from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
-from atria_models.pipelines.classification.sequence import OverflowStrategy
+from atria_models.pipelines.atria_model_pipeline import (
+    AtriaModelPipeline,
+    MetricInitializer,
+)
+from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 from atria_models.utilities.checkpoints import CheckpointConfig
-
-if TYPE_CHECKING:
-    import torch
 
 
 @MODEL_PIPELINE.register(
     "question_answering",
     hydra_defaults=["_self_", {"/model@model": "transformers/question_answering"}],
+    metrics=[MetricInitializer(name="sequence_anls")],
 )
 class QuestionAnsweringPipeline(AtriaModelPipeline):
     """
@@ -59,8 +62,10 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
 
     def __init__(
         self,
-        model: AtriaModel | dict[str, AtriaModel],
+        model: QuestionAnsweringModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
         use_bbox: bool = True,
         use_image: bool = True,
         training_overflow_strategy: OverflowStrategy
@@ -84,7 +89,12 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         self._evaluation_overflow_strategy = evaluation_overflow_strategy
         self._input_stride = input_stride
 
-        super().__init__(model=model, checkpoint_configs=checkpoint_configs)
+        super().__init__(
+            model=model,
+            checkpoint_configs=checkpoint_configs,
+            metrics=metrics,
+            runtime_transforms=runtime_transforms,
+        )
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """

@@ -27,20 +27,17 @@ Version: 1.0.0
 License: MIT
 """
 
+from typing import TYPE_CHECKING
+
 from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
 from atria_core.logger.logger import get_logger
 from rich.pretty import pretty_repr
-from torch.nn import Module
-from transformers import (
-    AutoConfig,
-    AutoModelForImageClassification,
-    AutoModelForQuestionAnswering,
-    AutoModelForSequenceClassification,
-    AutoModelForTokenClassification,
-)
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.registry import MODEL
+
+if TYPE_CHECKING:
+    from torch.nn import Module
 
 logger = get_logger(__name__)
 
@@ -89,7 +86,7 @@ class TransformersModel(AtriaModel):
 
 
 @MODEL.register("transformers/sequence_classification")
-class SequenceClassificationTransformersModel(TransformersModel):
+class SequenceClassificationModel(TransformersModel):
     """
     Model for sequence classification tasks.
 
@@ -101,7 +98,9 @@ class SequenceClassificationTransformersModel(TransformersModel):
 
     def _build(
         self, *, num_labels: int | None = None, pretrained: bool = True, **kwargs
-    ) -> Module:
+    ) -> "Module":
+        from transformers import AutoConfig, AutoModelForSequenceClassification
+
         if pretrained:
             if num_labels is not None:
                 kwargs["num_labels"] = num_labels
@@ -127,7 +126,7 @@ class SequenceClassificationTransformersModel(TransformersModel):
 
 
 @MODEL.register("transformers/token_classification")
-class TokenClassificationTransformersModel(TransformersModel):
+class TokenClassificationModel(TransformersModel):
     """
     Model for token classification tasks.
 
@@ -139,7 +138,9 @@ class TokenClassificationTransformersModel(TransformersModel):
 
     def _build(
         self, *, num_labels: int | None = None, pretrained: bool = True, **kwargs
-    ) -> Module:
+    ) -> "Module":
+        from transformers import AutoConfig, AutoModelForTokenClassification
+
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
                 self._model_name,
@@ -167,7 +168,7 @@ class TokenClassificationTransformersModel(TransformersModel):
 
 
 @MODEL.register("transformers/image_classification")
-class ImageClassificationTransformersModel(TransformersModel):
+class ImageClassificationModel(TransformersModel):
     """
     Model for image classification tasks.
 
@@ -179,8 +180,9 @@ class ImageClassificationTransformersModel(TransformersModel):
 
     def _build(
         self, *, num_labels: int | None = None, pretrained: bool = True, **kwargs
-    ) -> Module:
+    ) -> "Module":
         from torch.nn import Linear
+        from transformers import AutoConfig, AutoModelForImageClassification
 
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
@@ -209,7 +211,7 @@ class ImageClassificationTransformersModel(TransformersModel):
 
 
 @MODEL.register("transformers/question_answering")
-class QuestionAnsweringTransformersModel(TransformersModel):
+class QuestionAnsweringModel(TransformersModel):
     """
     Model for question answering tasks.
 
@@ -221,7 +223,9 @@ class QuestionAnsweringTransformersModel(TransformersModel):
 
     def _build(
         self, *, num_labels: int | None = None, pretrained: bool = True, **kwargs
-    ) -> Module:
+    ) -> "Module":
+        from transformers import AutoConfig, AutoModelForQuestionAnswering
+
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
                 self._model_name, cache_dir=self._model_cache_dir, **kwargs

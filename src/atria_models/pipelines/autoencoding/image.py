@@ -21,18 +21,20 @@ License: MIT
 """
 
 import math
-from functools import partial
 
 import ignite.distributed as idist
 import torch
 from atria_core.logger.logger import get_logger
-from atria_core.types import DatasetMetadata, DocumentInstance, ImageInstance
-from ignite.contrib.handlers import TensorboardLogger
+from atria_core.transforms import DataTransformsDict
+from atria_core.types import DocumentInstance, ImageInstance
 from ignite.engine import Engine
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.diffusers_model import DiffusersAutoencoderModel
 from atria_models.data_types.outputs import AutoEncoderModelOutput, ModelOutput
-from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
+from atria_models.pipelines.atria_model_pipeline import (
+    AtriaModelPipeline,
+    MetricInitializer,
+)
 from atria_models.utilities.checkpoints import CheckpointConfig
 from atria_models.utilities.nn_modules import _unnormalize_image
 
@@ -42,46 +44,31 @@ SupportedBatchDataTypes = DocumentInstance | ImageInstance
 
 
 class AutoEncodingPipeline(AtriaModelPipeline):
-    """
-    AutoEncodingPipeline is a specific implementation of the AtriaModelPipeline for autoencoding tasks.
-
-    Args:
-        model_factory (Union[partial[AtriaModel], Dict[str, partial[AtriaModel]]]): Factory for creating the model.
-        dataset_metadata (Optional[DatasetMetadata]): Metadata for the dataset.
-        checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-        tb_logger (Optional[TensorboardLogger]): Tensorboard logger for visualization.
-        loss_type (str): Type of loss function to use. Default is "l2".
-
-    Attributes:
-        _loss_type (str): Type of loss function.
-        _loss_fn (torch.nn.Module): Loss function module.
-    """
-
     def __init__(
         self,
-        model_factory: partial[AtriaModel] | dict[str, partial[AtriaModel]],
-        dataset_metadata: DatasetMetadata | None = None,
+        model: DiffusersAutoencoderModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
-        tb_logger: TensorboardLogger | None = None,
+        metrics: list[MetricInitializer] | None = None,
+        runtime_transforms: DataTransformsDict = DataTransformsDict(),
         loss_type: str = "l2",
     ):
         """
-        Initializes the AutoEncodingPipeline.
+        Initialize the ImageClassificationPipeline.
 
         Args:
-            model_factory (Union[partial[AtriaModel], Dict[str, partial[AtriaModel]]]): Factory for creating the model.
-            dataset_metadata (Optional[DatasetMetadata]): Metadata for the dataset.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-            tb_logger (Optional[TensorboardLogger]): Tensorboard logger for visualization.
-            loss_type (str): Type of loss function to use. Default is "l2".
+            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
+            checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
+            mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
+            runtime_transforms (Optional[DataTransformsDict]): Runtime data transformations.
+            metric_factory (Optional[Dict[str, Callable]]): Factory for metrics.
         """
         self._loss_type = loss_type
 
         super().__init__(
-            model=model_factory,
-            dataset_metadata=dataset_metadata,
+            model=model,
             checkpoint_configs=checkpoint_configs,
-            tb_logger=tb_logger,
+            metrics=metrics,
+            runtime_transforms=runtime_transforms,
         )
 
     def _build_model(self) -> torch.nn.Module:
@@ -112,9 +99,9 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
         reconstruction = self.model(batch.image.content)
-        loss = self._loss_fn(input=reconstruction, target=input)
+        loss = self._loss_fn(input=reconstruction, target=batch.image.content)
         return AutoEncoderModelOutput(
-            loss=loss, real=input, reconstructed=reconstruction
+            loss=loss, real=batch.image.content, reconstructed=reconstruction
         )
 
     def evaluation_step(self, batch: SupportedBatchDataTypes, **kwargs) -> ModelOutput:
@@ -129,9 +116,9 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
         reconstruction = self.model(batch.image.content)
-        loss = self._loss_fn(input=reconstruction, target=input)
+        loss = self._loss_fn(input=reconstruction, target=batch.image.content)
         return AutoEncoderModelOutput(
-            loss=loss, real=input, reconstructed=reconstruction
+            loss=loss, real=batch.image.content, reconstructed=reconstruction
         )
 
     def predict_step(self, batch: SupportedBatchDataTypes, **kwargs) -> ModelOutput:
@@ -146,9 +133,9 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
         reconstruction = self.model(batch.image.content)
-        loss = self._loss_fn(input=reconstruction, target=input)
+        loss = self._loss_fn(input=reconstruction, target=batch.image.content)
         return AutoEncoderModelOutput(
-            loss=loss, real=input, reconstructed=reconstruction
+            loss=loss, real=batch.image.content, reconstructed=reconstruction
         )
 
     def visualization_step(
