@@ -49,10 +49,12 @@
     ],
     "python.analysis.include": [
         "./src",
+        "../atria_core/src",
         "../atria_registry/src",
     ],
     "python.analysis.extraPaths": [
         "./src",
+        "../atria_core/src",
         "../atria_registry/src",
     ],
     "python-envs.pythonProjects": [],

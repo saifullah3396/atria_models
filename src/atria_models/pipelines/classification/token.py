@@ -23,6 +23,7 @@ from typing import Any
 
 import torch
 from atria_core.transforms import DataTransformsDict
+from atria_core.types import TaskType
 from atria_transforms.data_types import TokenizedDocumentInstance
 
 from atria_models.core.transformers_model import TokenClassificationModel
@@ -36,7 +37,16 @@ from atria_models.utilities.checkpoints import CheckpointConfig
 
 @MODEL_PIPELINE.register(
     "token_classification",
-    hydra_defaults=["_self_", {"/model@model": "transformers/token_classification"}],
+    defaults=[
+        "_self_",
+        {"/model@model": "transformers/token_classification"},
+        {
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/sequence_classification"
+        },
+        {
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
+        },
+    ],
     metrics=[
         MetricInitializer(name="seqeval_accuracy_score"),
         MetricInitializer(name="seqeval_precision_score"),
@@ -61,6 +71,8 @@ class TokenClassificationPipeline(ClassificationPipeline):
         use_image (bool): Whether to use image information in the input.
         input_stride (int): Stride value for input tokenization.
     """
+
+    _TASK_TYPE: TaskType = TaskType.semantic_entity_recognition
 
     def __init__(
         self,
@@ -94,7 +106,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

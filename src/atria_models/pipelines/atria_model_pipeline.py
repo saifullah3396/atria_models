@@ -21,26 +21,20 @@ Version: 1.0.0
 License: MIT
 """
 
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from functools import wraps
+from functools import cached_property, wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union
 
 from atria_core.logger import get_logger
 from atria_core.transforms.base import DataTransformsDict
 from atria_core.types import TrainingStage
-from atria_registry.utilities import _instantiate_object_from_config
+from atria_registry.registry_config import RegistryConfig
 from omegaconf import OmegaConf
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from atria_models.core.atria_model import AtriaModel
-from atria_models.utilities.checkpoints import (
-    CheckpointConfig,
-    _bytes_to_checkpoint,
-    _checkpoint_to_bytes,
-)
+from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
+from atria_models.utilities.checkpoints import CheckpointConfig
 
 if TYPE_CHECKING:
     import torch
@@ -48,6 +42,7 @@ if TYPE_CHECKING:
     from ignite.contrib.handlers import TensorboardLogger
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
+    from torch import nn
 
     from atria_models.data_types.outputs import ModelOutput
     from atria_models.utilities.nn_modules import AtriaModelDict
@@ -55,12 +50,83 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class MetricInitializer(BaseModel):
-    name: str
-    kwargs: dict[str, Any] = Field(default_factory=dict)
+class AtriaModelPipelineConfig(BaseModel):
+    """
+    Configuration model for AtriaModelPipeline.
+
+    This model is used to define the configuration parameters for the AtriaModelPipeline.
+    It includes fields for model, checkpoint configurations, metric configurations, and runtime transforms.
+    """
+
+    model_config: AtriaModelConfig | dict[str, AtriaModelConfig]
+    checkpoint_configs: list[CheckpointConfig] | None = None
+    metric_configs: list[RegistryConfig] | None = None
+    runtime_transforms: DataTransformsDict = DataTransformsDict()
 
 
-class AtriaModelPipeline(ABC):
+class ModelConfigMixin:
+    __config_cls__: type[AtriaModelPipelineConfig]
+
+    def __init__(self, **kwargs):
+        config_cls = getattr(self.__class__, "__config_cls__", None)
+        assert issubclass(config_cls, AtriaModelPipelineConfig), (
+            f"{self.__class__.__name__} must define a __config_cls__ attribute "
+            "that is a subclass of ModelPipelineConfig."
+        )
+        self._config = config_cls(**kwargs)
+        super().__init__()
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        # Validate presence of Config at class definition time
+        if not hasattr(cls, "__config_cls__"):
+            raise TypeError(
+                f"{cls.__name__} must define a nested `__config_cls__` class."
+            )
+
+        if not issubclass(cls.__config_cls__, AtriaModelPipelineConfig):
+            raise TypeError(
+                f"{cls.__name__}.Config must subclass pydantic.ModelPipelineConfig. Got {cls.__config_cls__} instead."
+            )
+
+    def prepare_build_config(self):
+        from hydra_zen import builds
+
+        if self.__config_cls__ is None:
+            raise TypeError(
+                f"{self.__class__.__name__} must define a __config_cls__ attribute."
+            )
+
+        return OmegaConf.to_container(
+            OmegaConf.create(builds(self.__class__, populate_full_signature=True))
+        )
+
+    @cached_property
+    def config(self) -> AtriaModelPipelineConfig:
+        return self._config
+
+    @cached_property
+    def build_config(self) -> AtriaModelPipelineConfig:
+        return self.prepare_build_config()
+
+    @cached_property
+    def config_hash(self) -> str:
+        """
+        Hash of the dataset configuration for versioning.
+
+        Returns:
+            8-character hash string based on configuration content
+        """
+        import hashlib
+        import json
+
+        return hashlib.sha256(
+            json.dumps(self.build_config, sort_keys=True).encode()
+        ).hexdigest()[:8]
+
+
+class AtriaModelPipeline(ABC, ModelConfigMixin):
     """
     Abstract base class for task-specific PyTorch models.
 
@@ -76,13 +142,7 @@ class AtriaModelPipeline(ABC):
     _REQUIRED_MODEL_KEYS: ClassVar[list[str]] = []
     _TASK_TYPE: "TaskType"
 
-    def __init__(
-        self,
-        model: AtriaModel | dict[str, AtriaModel],
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-    ):
+    def __init__(self, **kwargs: Any):
         """
         Initializes the AtriaModelPipeline instance.
 
@@ -90,17 +150,16 @@ class AtriaModelPipeline(ABC):
             model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
             checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
         """
-        self._model = model
-        self._checkpoint_configs = checkpoint_configs
-        self._runtime_transforms = runtime_transforms
-        self._metrics = metrics or {}
-        self._built_metrics = {}
+        super().__init__(**kwargs)
+
+        self._metrics = {}
         self._dataset_metadata = None
         self._tb_logger = None
         self._progress_bar = None
         self._is_built = False
         self._apply_runtime_transforms = False
-        self._validate_model_input(model=model)
+        self._model: nn.Module = None
+        self._validate_model_config()
 
     def __init_subclass__(cls):
         super().__init_subclass__()
@@ -152,19 +211,6 @@ class AtriaModelPipeline(ABC):
         cls.visualization_step = wrapped_visualization_step
 
     @property
-    def config_hash(self) -> str:
-        """
-        Hash of the dataset configuration for versioning.
-
-        Returns:
-            8-character hash string based on configuration content
-        """
-        config_dict = OmegaConf.to_container(self.config, resolve=True)
-        config_dict.pop("_target_", None)
-        config_str = json.dumps(config_dict, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()[:8]
-
-    @property
     def task_type(self) -> "TaskType":
         """
         Returns the task type of the model pipeline
@@ -182,10 +228,14 @@ class AtriaModelPipeline(ABC):
         Returns:
             str: The model name.
         """
-        return self._model.model_name
+        if isinstance(self.config.model_config, dict):
+            return ",".join(
+                [cfg.model_name for cfg in self.config.model_config.values()]
+            )
+        return self.config.model_config.model_name
 
     @property
-    def task_module_name(self) -> str:
+    def pipeline_name(self) -> str:
         """
         Returns the name of the task module.
 
@@ -212,7 +262,7 @@ class AtriaModelPipeline(ABC):
         Returns:
             dict[str, Callable]: A dictionary of metrics.
         """
-        return self._built_metrics
+        return self._metrics
 
     @property
     def ema_modules(self) -> Union["torch.nn.Module", dict[str, "torch.nn.Module"]]:
@@ -287,15 +337,15 @@ class AtriaModelPipeline(ABC):
 
         self._model = _validate_built_model(self._build_model())
 
-        if self._checkpoint_configs is not None:
+        if self.config.checkpoint_configs is not None:
             CheckpointManager.load_checkpoints(
-                model=self._model, checkpoint_configs=self._checkpoint_configs
+                model=self._model, checkpoint_configs=self.config.checkpoint_configs
             )
 
         if idist.get_rank() == 0:
             idist.barrier()
 
-        self._built_metrics = self._build_metrics()
+        self._metrics = self._build_metrics()
 
         self._is_built = True
 
@@ -350,7 +400,7 @@ class AtriaModelPipeline(ABC):
                 prepare_for_distributed=True,
             )
 
-        self._built_metrics = self._build_metrics(device=device)
+        self._metrics = self._build_metrics(device=device)
 
         return self
 
@@ -436,7 +486,6 @@ class AtriaModelPipeline(ABC):
         Returns:
             dict: The state dictionary.
         """
-        from omegaconf import OmegaConf
 
         from atria_models.utilities.nn_modules import AtriaModelDict
 
@@ -450,7 +499,7 @@ class AtriaModelPipeline(ABC):
             )
         else:
             state_dict["model"] = self.model.state_dict()
-        state_dict["config"] = OmegaConf.to_container(self.config)
+        state_dict["config"] = OmegaConf.to_container(self.build_config)
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
@@ -483,6 +532,8 @@ class AtriaModelPipeline(ABC):
         description: str | None = None,
         is_public: bool = False,
     ) -> None:
+        from atria_models.utilities.checkpoints import _checkpoint_to_bytes
+
         assert self._is_built, (
             "Model must be built before uploading to the hub. "
             "Call `build()` method before uploading."
@@ -521,16 +572,17 @@ class AtriaModelPipeline(ABC):
             model=model,
             branch=branch,
             model_checkpoint=_checkpoint_to_bytes(self.state_dict()),
-            model_config=OmegaConf.to_container(self.config, resolve=True),
+            model_config=self.config,
         )
 
     @classmethod
     def load_from_registry(
         cls,
         pipeline_name: str,
+        model: str,
         model_name: str,
         dataset_metadata: "DatasetMetadata",
-        provider: str = "atria",
+        provider: str | None = None,
         overrides: list[str] | None = None,
         search_pkgs: list[str] | None = None,
         tb_logger: Optional["TensorboardLogger"] = None,
@@ -552,7 +604,11 @@ class AtriaModelPipeline(ABC):
         model_pipeline: AtriaModelPipeline = MODEL_PIPELINE.load_from_registry(
             pipeline_name,
             provider=provider,
-            overrides=[f"model_pipeline.model.model_name={model_name}"] + overrides,
+            overrides=[
+                f"model@model_pipeline.model={model}",
+                f"model_pipeline.model.model_name={model_name}",
+            ]
+            + overrides,
             search_pkgs=search_pkgs,
         )
         return model_pipeline.build(
@@ -582,6 +638,10 @@ class AtriaModelPipeline(ABC):
     def load_from_hub(
         cls, name: str, override_config: dict | None = None
     ) -> "AtriaModelPipeline":
+        from atria_registry.utilities import _instantiate_object_from_config
+
+        from atria_models.utilities.checkpoints import _bytes_to_checkpoint
+
         try:
             import atria_hub  # noqa: F401
         except ImportError:
@@ -749,30 +809,28 @@ class AtriaModelPipeline(ABC):
         """
         return self.__repr__()
 
-    def _validate_model_input(
-        self, model: Union["AtriaModel", "AtriaModelDict"]
-    ) -> None:
+    def _validate_model_config(self) -> None:
         """
         Validates the input model.
 
         Args:
-            model (Union[AtriaModel, AtriaModelDict]): The input model.
+            model (Union[AtriaModel, AtriaModelConfigDict]): The input model.
 
         Raises:
             AssertionError: If the model does not meet the required criteria.
         """
         if self._REQUIRES_MODEL_DICT:
-            assert isinstance(model, dict), (
+            assert isinstance(self.config.model_config, dict), (
                 f"Model builder must be provided as a dictionary of "
-                f"{AtriaModel} when _REQUIRES_MODEL_DICT is True"
+                f"{AtriaModelConfig} when _REQUIRES_MODEL_DICT is True"
             )
             for key in self._REQUIRED_MODEL_KEYS:
-                assert key in model, (
-                    f"Input model dictionary {model} must contain the key {key}"
+                assert key in self.config.model_config, (
+                    f"Input model dictionary {self.config.model_config} must contain the key {key}"
                 )
         else:
-            assert isinstance(model, AtriaModel), (
-                f"Expected model type to be {AtriaModel}, but got {type(model)}"
+            assert isinstance(self.config.model_config, AtriaModelConfig), (
+                f"Expected model type to be {AtriaModelConfig}, but got {type(self.config.model_config)}"
             )
 
     def _build_metrics(
@@ -786,13 +844,15 @@ class AtriaModelPipeline(ABC):
         """
         import inspect
 
-        built_metrics = {}
-        for metric_init in self._metrics:
+        metrics = {}
+        for metric_config in self.config.metric_configs:
+            import copy
+
             from atria_metrics import METRIC
 
-            metric_factory = METRIC.load_from_registry(metric_init.name)
+            metric_factory = METRIC.load_from_registry(metric_config.name)
             possible_args = inspect.signature(metric_factory).parameters
-            kwargs = metric_init.kwargs
+            kwargs = copy.deepcopy(metric_config.kwargs)
             if "num_classes" in possible_args:
                 assert self._dataset_metadata is not None, (
                     "Dataset metadata must be provided to determine the number of classes."
@@ -808,8 +868,8 @@ class AtriaModelPipeline(ABC):
                 )
             if "device" in possible_args:
                 kwargs["device"] = device
-            built_metrics[metric_init.name] = metric_factory(**kwargs)
-        return built_metrics
+            metrics[metric_config.name] = metric_factory(**kwargs)
+        return metrics
 
     def _build_model(self) -> Union["AtriaModel", "AtriaModelDict"]:
         """

@@ -34,10 +34,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@MODEL.register(
-    "timm",
-    model_name_pattern="${.model_name}",  # take the model name from the relative '_here_' config
-)
+@MODEL.register("timm")
 class TimmModel(AtriaModel):
     """
     A model constructor for `timm` models.
@@ -63,11 +60,11 @@ class TimmModel(AtriaModel):
         """
         import timm
 
-        build_kwargs = {"model_name": self._model_name, **kwargs}
+        build_kwargs = {"model_name": self.config.model_name, **kwargs}
         if num_labels is not None:
             build_kwargs["num_classes"] = num_labels
         logger.info(
-            "Setting up model %s(%s)",
+            "Setting up model %s with kwargs=(%s)",
             self.__class__.__name__,
             ", ".join(f"{k}={v!r}" for k, v in build_kwargs.items()),
         )

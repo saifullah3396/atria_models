@@ -1,9 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from atria_registry import RegistryGroup
 
-from atria_models.utilities.config import (
-    setup_model_config,
-    setup_model_pipeline_config,
-)
+if TYPE_CHECKING:
+    from atria_models.core.atria_model import AtriaModelConfig
 
 
 class ModelRegistryGroup(RegistryGroup):
@@ -14,56 +16,69 @@ class ModelRegistryGroup(RegistryGroup):
     within the registry system.
     """
 
-    def register(  # type: ignore[override]
-        self,
-        model_name: str,
-        is_torch_model: bool = False,
-        model_name_pattern: str | None = None,
-        **kwargs,
-    ) -> callable:
+    def register(
+        self, name: str, configs: list[AtriaModelConfig] | None = None, **kwargs
+    ):
         """
-        Decorator for registering a model.
+        Decorator for registering a module with configurations.
 
         Args:
-            model_name (str): The name of the model.
-            is_nn_model (bool): Whether the model is a PyTorch neural network model. Defaults to False.
-            model_name_pattern (str, optional): A pattern for the model name. Defaults to None.
+            name (str): The name of the module.
             **kwargs: Additional keyword arguments for the registration.
 
         Returns:
-            function: A decorator function for registering the model.
+            function: A decorator function for registering the module with configurations.
         """
 
-        from atria_models.core.atria_model import AtriaModel
-
         def decorator(decorated_class):
-            module_name = model_name
-            if issubclass(decorated_class, AtriaModel):
-                self.register_modules(
-                    module_paths=decorated_class,
-                    module_names=module_name,
-                    model_name=model_name,
-                    **kwargs,
-                )
-            elif is_torch_model:
+            from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
+            from atria_models.core.local_model import LocalModel
+
+            module_path = decorated_class
+            module_name = name
+            config_cls = None
+            config_cls_kwargs = {}
+
+            if not issubclass(decorated_class, AtriaModel):
                 from torch import nn
 
-                from atria_models.core.local_model import LocalModel
+                if issubclass(decorated_class, nn.Module):
+                    module_path = LocalModel
+                    module_name = f"atria/{module_name}"
+                    config_cls = LocalModel.__config_cls__
+                    config_cls_kwargs = {"model_class": decorated_class}
+                else:
+                    raise TypeError(
+                        f"Only AtriaModel or torch.nn.Module can be registered. {decorated_class} is not a subclass of AtriaModel or torch.nn.Module."
+                    )
+            else:
+                config_cls = decorated_class.__config_cls__
 
-                assert issubclass(decorated_class, nn.Module), (
-                    f"Only torch.nn.Module or AtriaModel can be registered. {decorated_class} is not a subclass of torch.nn.Module or AtriaModel."
+            if configs is not None:
+                assert isinstance(configs, list) and all(
+                    isinstance(config, AtriaModelConfig) for config in configs
+                ), (
+                    f"Expected configs to be a list of AtriaModelConfig, got {type(configs)} instead."
                 )
+                for config in configs:
+                    self.register_modules(
+                        module_paths=module_path,
+                        module_names=module_name + "/" + config.name,
+                        **{
+                            k: getattr(config, k) for k in config.__class__.model_fields
+                        },
+                        **kwargs,
+                    )
+                return decorated_class
+            else:
+                config = config_cls(**config_cls_kwargs)
                 self.register_modules(
-                    module_paths=LocalModel,
-                    module_names=f"atria/{module_name}",
-                    model_name=decorated_class,
+                    module_paths=module_path,
+                    module_names=module_name,
+                    **{k: getattr(config, k) for k in config.__class__.model_fields},
                     **kwargs,
                 )
-            else:
-                raise TypeError(
-                    f"Only AtriaModel or torch.nn.Module can be registered. {decorated_class} is not a subclass of AtriaModel or torch.nn.Module."
-                )
-            return setup_model_config()(decorated_class)
+                return decorated_class
 
         return decorator
 
@@ -109,12 +124,12 @@ class ModelPipelineRegistryGroup(RegistryGroup):
                         **config,
                         **kwargs,
                     )
-                return setup_model_pipeline_config()(decorated_class)
+                return decorated_class
             else:
                 module_name = name
                 self.register_modules(
                     module_paths=decorated_class, module_names=module_name, **kwargs
                 )
-                return setup_model_pipeline_config()(decorated_class)
+                return decorated_class
 
         return decorator

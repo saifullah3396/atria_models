@@ -67,7 +67,7 @@ class AutoEncodingPipeline(AtriaModelPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

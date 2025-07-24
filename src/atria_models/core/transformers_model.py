@@ -29,7 +29,6 @@ License: MIT
 
 from typing import TYPE_CHECKING
 
-from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
 from atria_core.logger.logger import get_logger
 from rich.pretty import pretty_repr
 
@@ -42,47 +41,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@MODEL.register(
-    "transformers",
-    model_name_pattern="${.model_name}",  # take the model name from the relative '_here_' config
-)
+@MODEL.register("transformers")
 class TransformersModel(AtriaModel):
-    """
-    Base class for Hugging Face Transformers models.
-
-    Args:
-        model_name (str): Name of the Hugging Face model.
-        model_cache_dir (Optional[str]): Directory for caching models.
-        pretrained (bool): Whether to use pretrained weights.
-        convert_bn_to_gn (bool): Whether to convert batch normalization to group normalization.
-        is_frozen (bool): Whether to freeze the model parameters.
-        frozen_keys_patterns (Optional[List[str]]): Patterns for keys to freeze.
-        unfrozen_keys_patterns (Optional[List[str]]): Patterns for keys to unfreeze.
-        **model_kwargs: Additional keyword arguments for the model.
-    """
-
-    def __init__(
-        self,
-        model_name: str,
-        model_cache_dir: str | None = None,
-        convert_bn_to_gn: bool = False,
-        is_frozen: bool = False,
-        frozen_keys_patterns: list[str] | None = None,
-        unfrozen_keys_patterns: list[str] | None = None,
-        pretrained_checkpoint: str | None = None,
-        **model_kwargs,
-    ):
-        self._model_cache_dir = model_cache_dir or _DEFAULT_ATRIA_MODELS_CACHE_DIR
-
-        super().__init__(
-            model_name=model_name,
-            convert_bn_to_gn=convert_bn_to_gn,
-            is_frozen=is_frozen,
-            frozen_keys_patterns=frozen_keys_patterns,
-            unfrozen_keys_patterns=unfrozen_keys_patterns,
-            pretrained_checkpoint=pretrained_checkpoint,
-            **model_kwargs,
-        )
+    pass
 
 
 @MODEL.register("transformers/sequence_classification")
@@ -105,23 +66,27 @@ class SequenceClassificationModel(TransformersModel):
             if num_labels is not None:
                 kwargs["num_labels"] = num_labels
             hf_config = AutoConfig.from_pretrained(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
 
             logger.debug(
                 f"Initializing the model with the following config:\n {pretty_repr(hf_config, expand_all=True)}"
             )
             return AutoModelForSequenceClassification.from_pretrained(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
         else:
             if num_labels is not None:
                 kwargs["num_labels"] = num_labels
             hf_config = AutoConfig(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
             return AutoModelForSequenceClassification(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
 
 
@@ -143,8 +108,8 @@ class TokenClassificationModel(TransformersModel):
 
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
-                self._model_name,
-                cache_dir=self._model_cache_dir,
+                self.config.model_name,
+                cache_dir=self.config.model_cache_dir,
                 num_labels=num_labels,
                 **kwargs,
             )
@@ -153,17 +118,21 @@ class TokenClassificationModel(TransformersModel):
                 f"Initializing the model with the following config:\n {pretty_repr(hf_config, expand_all=True)}"
             )
             return AutoModelForTokenClassification.from_pretrained(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
         else:
             hf_config = AutoConfig(
-                self._model_name,
-                cache_dir=self._model_cache_dir,
+                self.config.model_name,
+                cache_dir=self.config.model_cache_dir,
                 num_labels=num_labels,
                 **kwargs,
             )
             return AutoModelForTokenClassification(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
 
 
@@ -186,21 +155,25 @@ class ImageClassificationModel(TransformersModel):
 
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
 
             logger.debug(
                 f"Initializing the model with the following config:\n {pretty_repr(hf_config, expand_all=True)}"
             )
             model = AutoModelForImageClassification.from_pretrained(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
         else:
             hf_config = AutoConfig(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
             model = AutoModelForImageClassification(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
 
         model.classifier = Linear(model.classifier.in_features, self._num_labels)
@@ -228,19 +201,23 @@ class QuestionAnsweringModel(TransformersModel):
 
         if pretrained:
             hf_config = AutoConfig.from_pretrained(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
 
             logger.debug(
                 f"Initializing the model with the following config:\n {pretty_repr(hf_config, expand_all=True)}"
             )
             return AutoModelForQuestionAnswering.from_pretrained(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )
         else:
             hf_config = AutoConfig(
-                self._model_name, cache_dir=self._model_cache_dir, **kwargs
+                self.config.model_name, cache_dir=self.config.model_cache_dir, **kwargs
             )
             return AutoModelForQuestionAnswering(
-                self._model_name, config=hf_config, cache_dir=self._model_cache_dir
+                self.config.model_name,
+                config=hf_config,
+                cache_dir=self.config.model_cache_dir,
             )

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Union
 
 from atria_core.transforms import DataTransformsDict
 from atria_core.types import TaskType
+
 from atria_models.core.atria_model import AtriaModel
 from atria_models.core.timm_model import TimmModel
 from atria_models.core.torchvision_model import TorchHubModel
@@ -72,7 +73,7 @@ class MixupConfig:
 
 @MODEL_PIPELINE.register(
     "image_classification",
-    hydra_defaults=[
+    defaults=[
         "_self_",
         {"/model@model": "timm"},
         {"/data_transform@runtime_transforms.train": "image/default"},
@@ -126,7 +127,7 @@ class ImageClassificationPipeline(ClassificationPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

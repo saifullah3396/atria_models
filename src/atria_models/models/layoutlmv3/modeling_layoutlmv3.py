@@ -1178,112 +1178,7 @@ class LayoutLMv3ClassificationHead(nn.Module):
         return x
 
 
-@MODEL.register(
-    "layoutlmv3_for_sequence_classification",
-    pretrained_checkpoint="hf://sequence_classification/microsoft/layoutlmv3-base",
-    is_torch_model=True,
-)
-class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def __init__(self, num_labels: int):
-        config = LayoutLMv3Config.from_pretrained("microsoft/layoutlmv3-base")
-        config.num_labels = num_labels
-
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-        self.layoutlmv3 = LayoutLMv3Model(config)
-        self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        valid_span=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        bbox=None,
-        pixel_values=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        outputs = self.layoutlmv3(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            bbox=bbox,
-            images=pixel_values,
-            valid_span=valid_span,
-        )
-
-        sequence_output = outputs[0][:, 0, :]
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@MODEL.register(
-    "layoutlmv3_for_token_classification",
-    pretrained_checkpoint="hf://token_classification/microsoft/layoutlmv3-base",
-    is_torch_model=True,
-)
+@MODEL.register("layoutlmv3_for_token_classification")
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1385,11 +1280,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         )
 
 
-@MODEL.register(
-    "layoutlmv3_for_question_answering",
-    pretrained_checkpoint="hf://question_answering/microsoft/layoutlmv3-base",
-    is_torch_model=True,
-)
+@MODEL.register("layoutlmv3_for_question_answering")
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1400,7 +1291,9 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.layoutlmv3 = LayoutLMv3Model(config=config)
+        self.layoutlmv3 = LayoutLMv3Model.from_pretrained(
+            "microsoft/layoutlmv3-base", config=config
+        )
         # self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
         self.qa_outputs = LayoutLMv3ClassificationHead(config, pool_feature=False)
 
@@ -1491,6 +1384,105 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@MODEL.register("layoutlmv3_for_sequence_classification")
+class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+    def __init__(self, num_labels: int):
+        config = LayoutLMv3Config.from_pretrained("microsoft/layoutlmv3-base")
+        config.num_labels = num_labels
+
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.config = config
+        self.layoutlmv3 = LayoutLMv3Model.from_pretrained(
+            "microsoft/layoutlmv3-base", config=config
+        )
+        self.classifier = LayoutLMv3ClassificationHead(config, pool_feature=False)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        valid_span=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        bbox=None,
+        pixel_values=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        outputs = self.layoutlmv3(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            bbox=bbox,
+            images=pixel_values,
+            valid_span=valid_span,
+        )
+
+        sequence_output = outputs[0][:, 0, :]
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

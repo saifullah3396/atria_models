@@ -26,7 +26,6 @@ License: MIT
 
 from typing import TYPE_CHECKING
 
-from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
 from atria_core.logger import get_logger
 from atria_core.utilities.imports import _resolve_module_from_path
 
@@ -39,64 +38,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@MODEL.register(
-    "diffusers",
-    model_name_pattern="${.model_name}",  # take the model name from the relative '_here_' config
-)
+@MODEL.register("diffusers")
 class DiffusersModel(AtriaModel):
-    """
-    A base model constructor for Diffusers models.
-
-    This class provides functionality for constructing models from the Diffusers
-    library. It supports configurations such as pretraining, freezing layers, and
-    filtering unused keyword arguments.
-
-    Attributes:
-        model_name (str): The name of the model to be constructed.
-        model_cache_dir (Optional[str]): The directory where the model weights are stored.
-        pretrained (bool): Whether to load pretrained weights.
-        convert_bn_to_gn (bool): Whether to convert BatchNorm layers to GroupNorm layers.
-        is_frozen (bool): Whether to freeze the model.
-        frozen_keys_patterns (Optional[List[str]]): Patterns to freeze model layers.
-        unfrozen_keys_patterns (Optional[List[str]]): Patterns to unfreeze model layers.
-    """
-
-    def __init__(
-        self,
-        model_name: str,
-        model_cache_dir: str | None = None,
-        convert_bn_to_gn: bool = False,
-        is_frozen: bool = False,
-        frozen_keys_patterns: list[str] | None = None,
-        unfrozen_keys_patterns: list[str] | None = None,
-        pretrained_checkpoint: str | None = None,
-        **model_kwargs,
-    ):
-        """
-        Initialize the DiffusersModel instance.
-
-        Args:
-            model_name (str): The name of the model to be constructed.
-            model_cache_dir (Optional[str], optional): The directory where the model weights are stored. Defaults to None.
-            pretrained (bool, optional): Whether to load pretrained weights. Defaults to True.
-            convert_bn_to_gn (bool, optional): Whether to convert BatchNorm layers to GroupNorm layers. Defaults to False.
-            is_frozen (bool, optional): Whether to freeze the model. Defaults to False.
-            frozen_keys_patterns (Optional[List[str]], optional): Patterns to freeze model layers. Defaults to None.
-            unfrozen_keys_patterns (Optional[List[str]], optional): Patterns to unfreeze model layers. Defaults to None.
-            **model_kwargs: Additional keyword arguments for the model.
-        """
-        self._model_cache_dir = model_cache_dir or _DEFAULT_ATRIA_MODELS_CACHE_DIR
-
-        super().__init__(
-            model_name=model_name,
-            convert_bn_to_gn=convert_bn_to_gn,
-            is_frozen=is_frozen,
-            frozen_keys_patterns=frozen_keys_patterns,
-            unfrozen_keys_patterns=unfrozen_keys_patterns,
-            pretrained_checkpoint=pretrained_checkpoint,
-            **model_kwargs,
-        )
-
     @property
     def model_name(self) -> str:
         """
@@ -105,9 +48,9 @@ class DiffusersModel(AtriaModel):
         Returns:
             str: The name of the model.
         """
-        return self._model_name
+        return self.config.model_name
 
-    def _resolve_model_class(self):
+    def _resolve_model_class(self) -> type:
         """
         Resolve the model class from the Diffusers library.
 
@@ -118,9 +61,9 @@ class DiffusersModel(AtriaModel):
             Exception: If the model class cannot be resolved.
         """
         try:
-            return _resolve_module_from_path(f"diffusers.{self._model_name}")
+            return _resolve_module_from_path(f"diffusers.{self.config.model_name}")
         except Exception as e:
-            logger.exception(f"Error loading model class {self._model_name}: {e}")
+            logger.exception(f"Error loading model class {self.config.model_name}: {e}")
             raise
 
     def _build(self, pretrained: bool = True, **kwargs) -> "Module":
@@ -170,7 +113,7 @@ class DiffusersAutoencoderModel(DiffusersModel):
         Returns:
             Module: The constructed autoencoder model.
         """
-        assert self._model_name in ["AutoencoderKL"]
+        assert self.config.model_name in ["AutoencoderKL"]
         super()._build(subfolder="vae", **kwargs)
 
 
@@ -192,5 +135,5 @@ class DiffusersDiffusionModel(DiffusersModel):
         Returns:
             Module: The constructed diffusion model.
         """
-        assert self._model_name in ["UNet2DModel", "UNet2DConditionModel"]
+        assert self.config.model_name in ["UNet2DModel", "UNet2DConditionModel"]
         super()._build(**kwargs)

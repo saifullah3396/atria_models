@@ -25,6 +25,8 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
 import io
 from collections import OrderedDict
 from pathlib import Path
@@ -52,7 +54,7 @@ def _checkpoint_to_bytes(checkpoint: dict[str, Any]) -> io.BytesIO:
     return buffer.read()
 
 
-def _bytes_to_checkpoint(buffer: bytes) -> "torch.nn.Module":
+def _bytes_to_checkpoint(buffer: bytes) -> torch.nn.Module:
     import torch
 
     buffer = io.BytesIO(buffer)
@@ -93,7 +95,7 @@ class CheckpointManager:
 
     @staticmethod
     def load_checkpoints(
-        model: "torch.nn.Module", checkpoint_configs: list[CheckpointConfig]
+        model: torch.nn.Module, checkpoint_configs: list[CheckpointConfig]
     ) -> None:
         """
         Loads multiple checkpoints into a model based on a list of configurations.
@@ -134,7 +136,7 @@ class CheckpointManager:
 
     @staticmethod
     def load_checkpoint(
-        model: "torch.nn.Module",
+        model: torch.nn.Module,
         checkpoint: dict[str, Any],
         checkpoint_state_dict_path: str | None = "state_dict",
         model_state_dict_path: str | None = None,
@@ -256,7 +258,7 @@ class CheckpointManager:
 
     @staticmethod
     def _apply_checkpoint_to_model(
-        model: "nn.Module",
+        model: nn.Module,
         checkpoint: dict[str, Any],
         model_state_dict_path: str | None = None,
         strict: bool = True,

@@ -513,11 +513,13 @@ def _auto_model(
     import torch
     import torch.nn as nn
     from ignite.distributed import utils as idist
-    from ignite.distributed.comp_models import horovod as idist_hvd
-    from ignite.distributed.comp_models import native as idist_native
+    from ignite.distributed.comp_models import (
+        horovod as idist_hvd,
+        native as idist_native,
+    )
 
     # Put model's parameters to device if its parameters are not on the device
-    if not all([p.device == device for p in model.parameters()]):
+    if not all(p.device == device for p in model.parameters()):
         model.to(device)
 
     # distributed data parallel model
@@ -542,9 +544,7 @@ def _auto_model(
                 logger.info(
                     f"Apply torch DistributedDataParallel on model, device id: {lrank}"
                 )
-                kwargs["device_ids"] = [
-                    lrank,
-                ]
+                kwargs["device_ids"] = [lrank]
             else:
                 logger.info("Apply torch DistributedDataParallel on model")
 
@@ -587,8 +587,9 @@ def _module_to_device(
         - If `prepare_for_distributed` is True, the module is wrapped for distributed training using Ignite's `auto_model`.
         - If the module is already wrapped in `DistributedDataParallel` or `DataParallel`, it is further wrapped with `ModuleProxyWrapper`.
     """
-    from atria_models.utilities.ddp_model_proxy import ModuleProxyWrapper
     from torch import nn
+
+    from atria_models.utilities.ddp_model_proxy import ModuleProxyWrapper
 
     if prepare_for_distributed:
         module = _auto_model(device=device, model=module, sync_bn=sync_bn)

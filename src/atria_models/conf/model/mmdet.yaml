@@ -1,10 +1,9 @@
 _target_: atria_models.core.mmdet_model.MMDetModel
-_partial_: false
-model_name: mmdet
-model_search_paths: null
-model_cache_dir: null
+model_name: ???
 convert_bn_to_gn: false
 is_frozen: false
 frozen_keys_patterns: null
 unfrozen_keys_patterns: null
 pretrained_checkpoint: null
+model_cache_dir: null
+model_search_paths: null

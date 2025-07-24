@@ -24,6 +24,7 @@ from typing import Any
 
 import torch
 from atria_core.transforms import DataTransformsDict
+from atria_core.types import TaskType
 from atria_transforms.data_types import TokenizedDocumentInstance
 
 from atria_models.core.transformers_model import QuestionAnsweringModel
@@ -38,8 +39,17 @@ from atria_models.utilities.checkpoints import CheckpointConfig
 
 
 @MODEL_PIPELINE.register(
-    "question_answering",
-    hydra_defaults=["_self_", {"/model@model": "transformers/question_answering"}],
+    "visual_question_answering",
+    defaults=[
+        "_self_",
+        {"/model@model": "transformers/question_answering"},
+        {
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/visual_question_answering"
+        },
+        {
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/visual_question_answering"
+        },
+    ],
     metrics=[MetricInitializer(name="sequence_anls")],
 )
 class QuestionAnsweringPipeline(AtriaModelPipeline):
@@ -59,6 +69,8 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         - use_image: Whether to use image pixel values in the model inputs.
         - input_stride: The stride value for handling overlapping tokens in strided tokenization.
     """
+
+    _TASK_TYPE: TaskType = TaskType.visual_question_answering
 
     def __init__(
         self,
@@ -92,7 +104,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

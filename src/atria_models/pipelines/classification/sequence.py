@@ -22,8 +22,10 @@ License: MIT
 from typing import Any
 
 from atria_core.transforms import DataTransformsDict
+from atria_core.types import TaskType
 from atria_transforms.data_types import TokenizedDocumentInstance
 
+from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import SequenceClassificationModel
 from atria_models.data_types.outputs import ClassificationModelOutput
 from atria_models.pipelines.atria_model_pipeline import MetricInitializer
@@ -35,7 +37,16 @@ from atria_models.utilities.checkpoints import CheckpointConfig
 
 @MODEL_PIPELINE.register(
     "sequence_classification",
-    hydra_defaults=["_self_", {"/model@model": "transformers/sequence_classification"}],
+    defaults=[
+        "_self_",
+        {"/model@model": "transformers/sequence_classification"},
+        {
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/sequence_classification"
+        },
+        {
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
+        },
+    ],
     metrics=[
         MetricInitializer(name="accuracy"),
         MetricInitializer(name="precision"),
@@ -59,9 +70,11 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         use_image (bool): Flag indicating whether image data is used.
     """
 
+    _TASK_TYPE: TaskType = TaskType.sequence_classification
+
     def __init__(
         self,
-        model: SequenceClassificationModel,
+        model: SequenceClassificationModel | LocalModel,
         checkpoint_configs: list[CheckpointConfig] | None = None,
         metrics: list[MetricInitializer] | None = None,
         runtime_transforms: DataTransformsDict = DataTransformsDict(),
@@ -89,7 +102,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

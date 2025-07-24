@@ -1,9 +1,8 @@
 _target_: atria_models.core.torchvision_model.TorchHubModel
-_partial_: false
-model_name: torchhub
-model_cache_dir: null
+model_name: ???
 convert_bn_to_gn: false
 is_frozen: false
 frozen_keys_patterns: null
 unfrozen_keys_patterns: null
 pretrained_checkpoint: null
+model_cache_dir: null

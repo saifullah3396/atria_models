@@ -3,7 +3,7 @@ from pathlib import Path
 
 from atria_core.logger.logger import get_logger
 from atria_core.transforms import DataTransformsDict
-from atria_core.types import TrainingStage
+from atria_core.types import TaskType, TrainingStage
 from atria_transforms.core.mmdet import MMDetInput
 from ignite.engine import Engine
 from pydantic import Field
@@ -33,8 +33,17 @@ class TestTimeAugmentationConfig:
 
 
 @MODEL_PIPELINE.register(
-    "object_detection",
-    hydra_defaults=["_self_", {"/model@model": "mmdet"}],
+    "layout_analysis",
+    defaults=[
+        "_self_",
+        {"/model@model": "mmdet"},
+        {
+            "/data_transform@runtime_transforms.train": "document_instance_mmdet_transform/train"
+        },
+        {
+            "/data_transform@runtime_transforms.evaluation": "document_instance_mmdet_transform/train"
+        },
+    ],
     metrics=[MetricInitializer(name="cocoeval")],
 )
 class ObjectDetectionPipeline(AtriaModelPipeline):
@@ -49,6 +58,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
         mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
     """
+
+    _TASK_TYPE: TaskType = TaskType.object_detection
 
     def __init__(
         self,
@@ -75,7 +86,7 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

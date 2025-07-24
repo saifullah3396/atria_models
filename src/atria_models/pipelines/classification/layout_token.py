@@ -23,6 +23,7 @@ from typing import Any
 
 import torch
 from atria_core.transforms import DataTransformsDict
+from atria_core.types import TaskType
 from atria_transforms.data_types import TokenizedDocumentInstance
 
 from atria_models.core.transformers_model import TokenClassificationModel
@@ -36,7 +37,16 @@ from atria_models.utilities.checkpoints import CheckpointConfig
 
 @MODEL_PIPELINE.register(
     "layout_token_classification",
-    hydra_defaults=["_self_", {"/model@model": "transformers/token_classification"}],
+    defaults=[
+        "_self_",
+        {"/model@model": "transformers/token_classification"},
+        {
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/sequence_classification"
+        },
+        {
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
+        },
+    ],
     metrics=[
         MetricInitializer(name="layout_precision"),
         MetricInitializer(name="layout_recall"),
@@ -60,6 +70,8 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         - use_image: Whether to use image pixel values in the model inputs.
         - input_stride: The stride value for handling overlapping tokens in strided tokenization.
     """
+
+    _TASK_TYPE: TaskType = TaskType.layout_entity_recognition
 
     def __init__(
         self,
@@ -93,7 +105,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         super().__init__(
             model=model,
             checkpoint_configs=checkpoint_configs,
-            metrics=metrics,
+            metric_configs=metrics,
             runtime_transforms=runtime_transforms,
         )
 

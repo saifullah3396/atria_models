@@ -19,12 +19,12 @@ Version: 1.0.0
 License: MIT
 """
 
-import importlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from atria_core.logger import get_logger
+from pydantic import model_validator
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
 
 if TYPE_CHECKING:
     from torch.nn import Module
@@ -32,21 +32,36 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class LocalModel(AtriaModel):
-    """
-    LocalModel Class
+class LocalModelConfig(AtriaModelConfig):
+    model_class: type  # The class of the model to be instantiated
 
-    This class is a specific implementation of the `AtriaModel` for managing local PyTorch models.
-    It provides functionality for building models, configuring batch normalization layers, and
-    managing frozen layers.
-    """
+    @model_validator(mode="before")
+    @classmethod
+    def validate_model_name(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if "model_name" not in values:
+            values["model_name"] = values["model_class"].__name__
+        return values
+
+
+class LocalModel(AtriaModel):
+    __config_cls__ = LocalModelConfig
 
     def _build(self, **kwargs) -> "Module":
-        if "pretrained" in kwargs:
-            kwargs.pop("pretrained")
+        import inspect
 
-        # Split the full path to get module and class name
-        module_path, class_name = self.model_name.rsplit(".", 1)
-        model_module = importlib.import_module(module_path)
-        model_class = getattr(model_module, class_name)
-        return model_class(**kwargs)
+        self.config: LocalModelConfig
+
+        # Get the init signature of the model class
+        signature = inspect.signature(self.config.model_class.__init__)
+        valid_params = signature.parameters
+
+        # Filter kwargs to only include valid init parameters
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
+
+        logger.info(
+            "Setting up model %s with kwargs=(%s)",
+            self.config.model_class,
+            ", ".join(f"{k}={v!r}" for k, v in filtered_kwargs.items()),
+        )
+
+        return self.config.model_class(**filtered_kwargs)
