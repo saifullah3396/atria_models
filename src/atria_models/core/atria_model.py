@@ -132,8 +132,6 @@ class AtriaModel(ModelConfigMixin):
 
             self.config.model_cache_dir = str(_DEFAULT_ATRIA_MODELS_CACHE_DIR)
 
-        self._model = None
-
     @property
     def model_name(self) -> str:
         """
@@ -252,7 +250,7 @@ class AtriaModel(ModelConfigMixin):
                 )
         self._configure_batch_norm_layers(model)
         self._configure_model_frozen_layers(model)
-        self._model = model
+        return model
 
     @abstractmethod
     def _build(self, **kwargs) -> nn.Module:
@@ -271,28 +269,3 @@ class AtriaModel(ModelConfigMixin):
         raise NotImplementedError(
             "Subclasses must implement the _build method to initialize the model."
         )
-
-    def state_dict(self) -> dict[str, Any]:
-        """
-        Get the state dictionary of the model.
-
-        Returns:
-            dict[str, Any]: The state dictionary of the model.
-        """
-        if self._model is None:
-            raise ValueError("Model has not been built yet.")
-        return self._model.state_dict()
-
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        """
-        Load the state dictionary into the model.
-
-        Args:
-            state_dict (dict[str, Any]): The state dictionary to load.
-        """
-        if self._model is None:
-            raise ValueError("Model has not been built yet.")
-        self._model.load_state_dict(state_dict)
-
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return self._model(*args, **kwds)
