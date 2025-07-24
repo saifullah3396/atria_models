@@ -1,21 +1,33 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from atria_core.logger.logger import get_logger
-from atria_core.transforms import DataTransformsDict
 from atria_core.types import TaskType, TrainingStage
-from atria_transforms.core.mmdet import MMDetInput
-from ignite.engine import Engine
 from pydantic import Field
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.data_types.outputs import MMDetEvaluationOutput, MMDetTrainingOutput
 from atria_models.pipelines.atria_model_pipeline import (
     AtriaModelPipeline,
-    MetricInitializer,
+    AtriaModelPipelineConfig,
+    RegistryConfig,
 )
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
+
+if TYPE_CHECKING:
+    from atria_core.types import TaskType, TrainingStage
+    from atria_transforms.core.mmdet import MMDetInput
+    from ignite.engine import Engine
+    from pydantic import Field
+
+    from atria_models.data_types.outputs import (
+        MMDetEvaluationOutput,
+        MMDetTrainingOutput,
+    )
+
 
 logger = get_logger(__name__)
 
@@ -32,6 +44,14 @@ class TestTimeAugmentationConfig:
     max_per_img: int = 100
 
 
+class ObjectDetectionPipelineConfig(AtriaModelPipelineConfig):
+    model: AtriaModel
+    requires_test_time_aug: bool = False
+    test_time_aug_config: TestTimeAugmentationConfig | None = (
+        TestTimeAugmentationConfig()
+    )
+
+
 @MODEL_PIPELINE.register(
     "layout_analysis",
     defaults=[
@@ -44,7 +64,7 @@ class TestTimeAugmentationConfig:
             "/data_transform@runtime_transforms.evaluation": "document_instance_mmdet_transform/train"
         },
     ],
-    metrics=[MetricInitializer(name="cocoeval")],
+    metric_configs=[RegistryConfig(name="cocoeval")],
 )
 class ObjectDetectionPipeline(AtriaModelPipeline):
     """
@@ -59,36 +79,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
     """
 
-    _TASK_TYPE: TaskType = TaskType.object_detection
-
-    def __init__(
-        self,
-        model: AtriaModel | dict[str, AtriaModel],
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-        requires_test_time_aug: bool = False,
-        test_time_aug_config: TestTimeAugmentationConfig
-        | None = TestTimeAugmentationConfig(),
-    ):
-        """
-        Initialize the ImageClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
-            requires_test_time_aug (bool): Whether the model requires test time augmentation.
-            test_time_aug_config (Optional[TestTimeAugmentationConfig]): Configuration for test time augmentation.
-        """
-        self._requires_test_time_augmentation = requires_test_time_aug
-        self._test_time_aug_config = test_time_aug_config
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = ObjectDetectionPipelineConfig
+    ___task_type____: TaskType = TaskType.object_detection
 
     def _build_model(self):
         from mmdet.models.detectors import BaseDetector
@@ -104,9 +96,9 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
             "Model must be an instance of mmdet BaseDetector"
         )
 
-        if self._requires_test_time_augmentation:
+        if self.config.requires_test_time_augmentation:
             self._tta_model = DetTTAModel(
-                tta_cfg=self._test_time_aug_config,
+                tta_cfg=self.config.test_time_aug_config,
                 module=torch_model,
                 data_preprocessor=torch_model.data_preprocessor,
             )
@@ -117,6 +109,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         self, batch: MMDetInput, training_engine: Engine, **kwargs
     ) -> MMDetTrainingOutput:
         from mmdet.models.detectors import BaseDetector
+
+        from atria_models.data_types.outputs import MMDetTrainingOutput
 
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"
@@ -136,11 +130,13 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         import torch
         from mmdet.models.detectors import BaseDetector
 
+        from atria_models.data_types.outputs import MMDetEvaluationOutput
+
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"
         )
         batch = batch.model_dump()
-        if self._requires_test_time_augmentation:
+        if self.config.requires_test_time_augmentation:
             det_data_samples = self._tta_model.test_step(batch)
             return MMDetEvaluationOutput(
                 loss=torch.tensor(0, device=batch["inputs"][0].device),
@@ -160,11 +156,13 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         import torch
         from mmdet.models.detectors import BaseDetector
 
+        from atria_models.data_types.outputs import MMDetEvaluationOutput
+
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"
         )
         batch = batch.model_dump()
-        if self._requires_test_time_augmentation:
+        if self.config.requires_test_time_augmentation:
             det_data_samples = self._tta_model.test_step(batch)
             return MMDetEvaluationOutput(
                 loss=torch.tensor(0, device=batch["inputs"][0].device),
@@ -189,7 +187,7 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
             "Model must be an instance of mmdet BaseDetector"
         )
         batch = batch.model_dump()
-        if self._requires_test_time_augmentation:
+        if self.config.requires_test_time_augmentation:
             det_data_samples = self._tta_model.test_step(batch)
         else:
             det_data_samples = self._model.test_step(batch)
@@ -209,7 +207,7 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         logger.info(f"Saving visualizations to {output_dir}")
         for idx, data_sample in enumerate(det_data_samples):
             if (
-                self._requires_test_time_augmentation
+                self.config.requires_test_time_augmentation
             ):  # for tta, the inputs are of shape (B, TTA, C, H, W)
                 img = batch["inputs"][0][idx].cpu().numpy().transpose(1, 2, 0)
             else:  # else the inputs are of shape (B, C, H, W)

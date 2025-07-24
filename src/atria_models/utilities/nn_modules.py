@@ -519,7 +519,7 @@ def _auto_model(
     )
 
     # Put model's parameters to device if its parameters are not on the device
-    if not all(p.device == device for p in model.parameters()):
+    if not all([p.device == device for p in model.parameters()]):
         model.to(device)
 
     # distributed data parallel model

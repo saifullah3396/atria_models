@@ -19,20 +19,34 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import Any
+from __future__ import annotations
 
-from atria_core.transforms import DataTransformsDict
+from typing import TYPE_CHECKING, Any
+
 from atria_core.types import TaskType
-from atria_transforms.data_types import TokenizedDocumentInstance
 
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import SequenceClassificationModel
 from atria_models.data_types.outputs import ClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import MetricInitializer
+from atria_models.pipelines.atria_model_pipeline import (
+    AtriaModelPipelineConfig,
+    RegistryConfig,
+)
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
+
+if TYPE_CHECKING:
+    from atria_transforms.data_types import TokenizedDocumentInstance
+
+
+class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
+    model: SequenceClassificationModel | LocalModel
+    use_bbox: bool = True
+    use_image: bool = True
+    training_overflow_strategy: OverflowStrategy = OverflowStrategy.select_first
+    evaluation_overflow_strategy: OverflowStrategy = OverflowStrategy.select_first
+    input_stride: int = 0
 
 
 @MODEL_PIPELINE.register(
@@ -47,12 +61,12 @@ from atria_models.utilities.checkpoints import CheckpointConfig
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
     ],
-    metrics=[
-        MetricInitializer(name="accuracy"),
-        MetricInitializer(name="precision"),
-        MetricInitializer(name="recall"),
-        MetricInitializer(name="f1_score"),
-        MetricInitializer(name="confusion_matrix"),
+    metric_configs=[
+        RegistryConfig(name="accuracy"),
+        RegistryConfig(name="precision"),
+        RegistryConfig(name="recall"),
+        RegistryConfig(name="f1_score"),
+        RegistryConfig(name="confusion_matrix"),
     ],
 )
 class SequenceClassificationPipeline(ClassificationPipeline):
@@ -70,45 +84,12 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         use_image (bool): Flag indicating whether image data is used.
     """
 
-    _TASK_TYPE: TaskType = TaskType.sequence_classification
-
-    def __init__(
-        self,
-        model: SequenceClassificationModel | LocalModel,
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-        use_bbox: bool = True,
-        use_image: bool = True,
-        training_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_first,
-        evaluation_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_first,
-    ):
-        """
-        Initialize the SequenceClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-            use_bbox (bool): Flag indicating whether bounding box data is used.
-            use_image (bool): Flag indicating whether image data is used.
-        """
-        self._use_bbox = use_bbox
-        self._use_image = use_image
-        self._training_overflow_strategy = training_overflow_strategy
-        self._evaluation_overflow_strategy = evaluation_overflow_strategy
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = SequenceClassificationPipelineConfig
+    __task_type__: TaskType = TaskType.sequence_classification
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single training step.
 
@@ -120,12 +101,13 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
-        if self._training_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.training_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -134,7 +116,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single evaluation step.
 
@@ -146,12 +128,13 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -160,7 +143,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single prediction step.
 
@@ -172,12 +155,13 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -200,8 +184,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             "input_ids": batch.token_ids,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
-            "bbox": batch.token_bboxes if self._use_bbox else None,
-            "pixel_values": batch.image.content if self._use_image else None,
+            "bbox": batch.token_bboxes if self.config.use_bbox else None,
+            "pixel_values": batch.image.content if self.config.use_image else None,
             "labels": batch.label,
         }
         return self._model(**inputs)

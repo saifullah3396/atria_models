@@ -1,0 +1,17 @@
+_target_: atria_models.pipelines.classification.token.TokenClassificationPipeline
+metric_configs:
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: seqeval_accuracy_score
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: seqeval_precision_score
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: seqeval_recall_score
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: seqeval_f1_score
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: seqeval_classification_report
+defaults:
+- _self_
+- /model@model: transformers/token_classification
+- /data_transform@runtime_transforms.train: document_instance_tokenizer/sequence_classification
+- /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/sequence_classification

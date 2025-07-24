@@ -1,0 +1,9 @@
+_target_: atria_models.pipelines.qa.qa.QuestionAnsweringPipeline
+metric_configs:
+- _target_: atria_registry.registry_config.RegistryConfig
+  name: sequence_anls
+defaults:
+- _self_
+- /model@model: transformers/question_answering
+- /data_transform@runtime_transforms.train: document_instance_tokenizer/visual_question_answering
+- /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/visual_question_answering

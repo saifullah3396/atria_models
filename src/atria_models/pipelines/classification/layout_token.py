@@ -19,20 +19,36 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import Any
+from __future__ import annotations
 
-import torch
-from atria_core.transforms import DataTransformsDict
+from typing import TYPE_CHECKING, Any
+
 from atria_core.types import TaskType
-from atria_transforms.data_types import TokenizedDocumentInstance
+from atria_registry.registry_config import RegistryConfig
 
+from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
-from atria_models.data_types.outputs import LayoutTokenClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import MetricInitializer
+from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
+
+if TYPE_CHECKING:
+    from typing import TYPE_CHECKING, Any
+
+    import torch
+    from atria_transforms.data_types import TokenizedDocumentInstance
+
+    from atria_models.data_types.outputs import LayoutTokenClassificationModelOutput
+
+
+class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
+    model: TokenClassificationModel | LocalModel
+    use_bbox: bool = True
+    use_image: bool = True
+    training_overflow_strategy: OverflowStrategy = OverflowStrategy.select_random
+    evaluation_overflow_strategy: OverflowStrategy = OverflowStrategy.select_all
+    input_stride: int = 0
 
 
 @MODEL_PIPELINE.register(
@@ -47,10 +63,10 @@ from atria_models.utilities.checkpoints import CheckpointConfig
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
     ],
-    metrics=[
-        MetricInitializer(name="layout_precision"),
-        MetricInitializer(name="layout_recall"),
-        MetricInitializer(name="layout_f1"),
+    metric_configs=[
+        RegistryConfig(name="layout_precision"),
+        RegistryConfig(name="layout_recall"),
+        RegistryConfig(name="layout_f1"),
     ],
 )
 class LayoutTokenClassificationPipeline(ClassificationPipeline):
@@ -71,43 +87,8 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         - input_stride: The stride value for handling overlapping tokens in strided tokenization.
     """
 
-    _TASK_TYPE: TaskType = TaskType.layout_entity_recognition
-
-    def __init__(
-        self,
-        model: TokenClassificationModel,
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-        use_bbox: bool = True,
-        use_image: bool = True,
-        training_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_random,
-        evaluation_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_all,
-        input_stride: int = 0,
-    ):
-        """
-        Initialize the SequenceClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-            use_bbox (bool): Flag indicating whether bounding box data is used.
-            use_image (bool): Flag indicating whether image data is used.
-        """
-        self._use_bbox = use_bbox
-        self._use_image = use_image
-        self._training_overflow_strategy = training_overflow_strategy
-        self._evaluation_overflow_strategy = evaluation_overflow_strategy
-        self._input_stride = input_stride
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = SequenceClassificationPipelineConfig
+    __task_type__: TaskType = TaskType.layout_entity_recognition
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
@@ -120,14 +101,14 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         # tokens are to be ignored for evaluation as they will be repeated tokens from the previous part of the document
         # first we check if there are overflowing samples in the batch and if so for these tokens first N stride tokens
         # are to be ignored for evaluation
-        if self._input_stride > 0:
+        if self.config.input_stride > 0:
             for sample_idx, sample_word_ids in enumerate(batch.word_ids):
                 # if the minimum word id is greater than 0, then we have an overflowing sample
                 # this means this is a continuation of the previous sample and the first N tokens
                 if sample_word_ids[sample_word_ids != -100].min() > 0:
-                    batch.prediction_indices_mask[sample_idx][: self._input_stride] = (
-                        False
-                    )
+                    batch.prediction_indices_mask[sample_idx][
+                        : self.config.input_stride
+                    ] = False
 
     def _extract_target_labels(self, batch: TokenizedDocumentInstance):
         target_labels = []
@@ -140,7 +121,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         return target_labels
 
     def _extract_predicted_labels(
-        self, batch: TokenizedDocumentInstance, logits: "torch.Tensor"
+        self, batch: TokenizedDocumentInstance, logits: torch.Tensor
     ):
         predicted_labels = []
         for predicted, mask in zip(
@@ -153,7 +134,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "LayoutTokenClassificationModelOutput":
+    ) -> LayoutTokenClassificationModelOutput:
         """
         Performs a single training step.
 
@@ -165,11 +146,11 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
 
-        if self._training_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.training_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
@@ -189,7 +170,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "LayoutTokenClassificationModelOutput":
+    ) -> LayoutTokenClassificationModelOutput:
         """
         Performs a single evaluation step.
 
@@ -200,11 +181,11 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
         output = self._model_forward(batch)
         logits = output.logits
@@ -227,7 +208,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "LayoutTokenClassificationModelOutput":
+    ) -> LayoutTokenClassificationModelOutput:
         """
         Performs a single prediction step.
 
@@ -239,11 +220,11 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
 
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         # map the labels from the model output to the evaluation labels
@@ -296,9 +277,8 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
             "input_ids": batch.token_ids,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
-            "bbox": batch.token_bboxes if self._use_bbox else None,
-            "pixel_values": batch.image.content if self._use_image else None,
+            "bbox": batch.token_bboxes if self.config.use_bbox else None,
+            "pixel_values": batch.image.content if self.config.use_image else None,
             "labels": batch.token_labels,
         }
-        self._model.eval()
         return self._model(**inputs)

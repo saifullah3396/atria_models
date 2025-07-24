@@ -19,20 +19,37 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import Any
+from __future__ import annotations
 
-import torch
-from atria_core.transforms import DataTransformsDict
+from typing import TYPE_CHECKING, Any
+
 from atria_core.types import TaskType
-from atria_transforms.data_types import TokenizedDocumentInstance
 
+from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
 from atria_models.data_types.outputs import TokenClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import MetricInitializer
+from atria_models.pipelines.atria_model_pipeline import (
+    AtriaModelPipelineConfig,
+    RegistryConfig,
+)
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
+
+if TYPE_CHECKING:
+    import torch
+    from atria_transforms.data_types import TokenizedDocumentInstance
+
+    from atria_models.data_types.outputs import TokenClassificationModelOutput
+
+
+class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
+    model: TokenClassificationModel | LocalModel
+    use_bbox: bool = True
+    use_image: bool = True
+    training_overflow_strategy: OverflowStrategy = OverflowStrategy.select_random
+    evaluation_overflow_strategy: OverflowStrategy = OverflowStrategy.select_all
+    input_stride: int = 0
 
 
 @MODEL_PIPELINE.register(
@@ -47,12 +64,12 @@ from atria_models.utilities.checkpoints import CheckpointConfig
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
     ],
-    metrics=[
-        MetricInitializer(name="seqeval_accuracy_score"),
-        MetricInitializer(name="seqeval_precision_score"),
-        MetricInitializer(name="seqeval_recall_score"),
-        MetricInitializer(name="seqeval_f1_score"),
-        MetricInitializer(name="seqeval_classification_report"),
+    metric_configs=[
+        RegistryConfig(name="seqeval_accuracy_score"),
+        RegistryConfig(name="seqeval_precision_score"),
+        RegistryConfig(name="seqeval_recall_score"),
+        RegistryConfig(name="seqeval_f1_score"),
+        RegistryConfig(name="seqeval_classification_report"),
     ],
 )
 class TokenClassificationPipeline(ClassificationPipeline):
@@ -72,43 +89,8 @@ class TokenClassificationPipeline(ClassificationPipeline):
         input_stride (int): Stride value for input tokenization.
     """
 
-    _TASK_TYPE: TaskType = TaskType.semantic_entity_recognition
-
-    def __init__(
-        self,
-        model: TokenClassificationModel,
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-        use_bbox: bool = True,
-        use_image: bool = True,
-        training_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_random,
-        evaluation_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_all,
-        input_stride: int = 0,
-    ):
-        """
-        Initialize the SequenceClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-            use_bbox (bool): Flag indicating whether bounding box data is used.
-            use_image (bool): Flag indicating whether image data is used.
-        """
-        self._use_bbox = use_bbox
-        self._use_image = use_image
-        self._training_overflow_strategy = training_overflow_strategy
-        self._evaluation_overflow_strategy = evaluation_overflow_strategy
-        self._input_stride = input_stride
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = TokenClassificationPipelineConfig
+    __task_type__: TaskType = TaskType.semantic_entity_recognition
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
@@ -121,14 +103,14 @@ class TokenClassificationPipeline(ClassificationPipeline):
         # tokens are to be ignored for evaluation as they will be repeated tokens from the previous part of the document
         # first we check if there are overflowing samples in the batch and if so for these tokens first N stride tokens
         # are to be ignored for evaluation
-        if self._input_stride > 0:
+        if self.config.input_stride > 0:
             for sample_idx, sample_word_ids in enumerate(batch.word_ids):
                 # if the minimum word id is greater than 0, then we have an overflowing sample
                 # this means this is a continuation of the previous sample and the first N tokens
                 if sample_word_ids[sample_word_ids != -100].min() > 0:
-                    batch.prediction_indices_mask[sample_idx][: self._input_stride] = (
-                        False
-                    )
+                    batch.prediction_indices_mask[sample_idx][
+                        : self.config.input_stride
+                    ] = False
 
     def _extract_target_labels(self, batch: TokenizedDocumentInstance):
         target_labels = []
@@ -154,7 +136,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "TokenClassificationModelOutput":
+    ) -> TokenClassificationModelOutput:
         """
         Performs a single training step.
 
@@ -166,11 +148,11 @@ class TokenClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
 
-        if self._training_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.training_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
@@ -190,7 +172,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "TokenClassificationModelOutput":
+    ) -> TokenClassificationModelOutput:
         """
         Performs a single evaluation step.
 
@@ -201,11 +183,11 @@ class TokenClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
         output = self._model_forward(batch)
         logits = output.logits
@@ -226,7 +208,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "TokenClassificationModelOutput":
+    ) -> TokenClassificationModelOutput:
         """
         Performs a single prediction step.
 
@@ -238,11 +220,11 @@ class TokenClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
 
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
         output = self._model_forward(batch)
         logits = output.logits
@@ -291,9 +273,8 @@ class TokenClassificationPipeline(ClassificationPipeline):
             "input_ids": batch.token_ids,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
-            "bbox": batch.token_bboxes if self._use_bbox else None,
-            "pixel_values": batch.image.content if self._use_image else None,
+            "bbox": batch.token_bboxes if self.config.use_bbox else None,
+            "pixel_values": batch.image.content if self.config.use_image else None,
             "labels": batch.token_labels,
         }
-        self._model.eval()
         return self._model(**inputs)

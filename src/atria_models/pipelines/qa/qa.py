@@ -20,22 +20,34 @@ Version: 1.0.0
 License: MIT
 """
 
-from typing import Any
+from __future__ import annotations
 
-import torch
-from atria_core.transforms import DataTransformsDict
+from typing import TYPE_CHECKING, Any
+
 from atria_core.types import TaskType
-from atria_transforms.data_types import TokenizedDocumentInstance
 
 from atria_models.core.transformers_model import QuestionAnsweringModel
 from atria_models.data_types.outputs import SequenceQAModelOutput
 from atria_models.pipelines.atria_model_pipeline import (
     AtriaModelPipeline,
-    MetricInitializer,
+    AtriaModelPipelineConfig,
+    RegistryConfig,
 )
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
+
+if TYPE_CHECKING:
+    import torch
+    from atria_transforms.data_types import TokenizedDocumentInstance
+
+
+class QuestionAnsweringPipelineConfig(AtriaModelPipelineConfig):
+    model: QuestionAnsweringModel
+    use_bbox: bool = True
+    use_image: bool = True
+    training_overflow_strategy: OverflowStrategy = OverflowStrategy.select_random
+    evaluation_overflow_strategy: OverflowStrategy = OverflowStrategy.select_all
+    input_stride: int = 0
 
 
 @MODEL_PIPELINE.register(
@@ -50,7 +62,7 @@ from atria_models.utilities.checkpoints import CheckpointConfig
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/visual_question_answering"
         },
     ],
-    metrics=[MetricInitializer(name="sequence_anls")],
+    metric_configs=[RegistryConfig(name="sequence_anls")],
 )
 class QuestionAnsweringPipeline(AtriaModelPipeline):
     """
@@ -70,43 +82,8 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         - input_stride: The stride value for handling overlapping tokens in strided tokenization.
     """
 
-    _TASK_TYPE: TaskType = TaskType.visual_question_answering
-
-    def __init__(
-        self,
-        model: QuestionAnsweringModel,
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-        use_bbox: bool = True,
-        use_image: bool = True,
-        training_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_random,
-        evaluation_overflow_strategy: OverflowStrategy
-        | None = OverflowStrategy.select_all,
-        input_stride: int = 0,
-    ):
-        """
-        Initialize the SequenceClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): Configuration for model checkpoints.
-            use_bbox (bool): Flag indicating whether bounding box data is used.
-            use_image (bool): Flag indicating whether image data is used.
-        """
-        self._use_bbox = use_bbox
-        self._use_image = use_image
-        self._training_overflow_strategy = training_overflow_strategy
-        self._evaluation_overflow_strategy = evaluation_overflow_strategy
-        self._input_stride = input_stride
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = QuestionAnsweringPipelineConfig
+    __task_type__: TaskType = TaskType.visual_question_answering
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
@@ -119,14 +96,14 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         # tokens are to be ignored for evaluation as they will be repeated tokens from the previous part of the document
         # first we check if there are overflowing samples in the batch and if so for these tokens first N stride tokens
         # are to be ignored for evaluation
-        if self._input_stride > 0:
+        if self.config.input_stride > 0:
             for sample_idx, sample_word_ids in enumerate(batch.word_ids):
                 # if the minimum word id is greater than 0, then we have an overflowing sample
                 # this means this is a continuation of the previous sample and the first N tokens
                 if sample_word_ids[sample_word_ids != -100].min() > 0:
-                    batch.prediction_indices_mask[sample_idx][: self._input_stride] = (
-                        False
-                    )
+                    batch.prediction_indices_mask[sample_idx][
+                        : self.config.input_stride
+                    ] = False
 
     def _extract_target_labels(self, batch: TokenizedDocumentInstance):
         target_labels = []
@@ -141,8 +118,8 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
     def _extract_predicted_answers(
         self,
         batch: TokenizedDocumentInstance,
-        start_logits: "torch.Tensor",
-        end_logits: "torch.Tensor",
+        start_logits: torch.Tensor,
+        end_logits: torch.Tensor,
     ):
         pred_answers = []
         for input_id, start_idx, end_idx in zip(
@@ -154,7 +131,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "SequenceQAModelOutput":
+    ) -> SequenceQAModelOutput:
         """
         Performs a single training step.
 
@@ -165,11 +142,11 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
-        if self._training_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.training_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._training_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.training_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
@@ -186,7 +163,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "SequenceQAModelOutput":
+    ) -> SequenceQAModelOutput:
         """
         Performs a single evaluation step.
 
@@ -197,11 +174,11 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
@@ -223,7 +200,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> "SequenceQAModelOutput":
+    ) -> SequenceQAModelOutput:
         """
         Performs a single evaluation step.
 
@@ -234,11 +211,11 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        if self._evaluation_overflow_strategy == OverflowStrategy.select_all:
+        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
             batch.select_all_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_random:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
             batch.select_random_overflow_samples()
-        elif self._evaluation_overflow_strategy == OverflowStrategy.select_first:
+        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
@@ -282,7 +259,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             "end_positions": batch.qa_pair.tokenized_answer_ends,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
-            "bbox": batch.token_bboxes if self._use_bbox else None,
-            "pixel_values": batch.image.content if self._use_image else None,
+            "bbox": batch.token_bboxes if self.config.use_bbox else None,
+            "pixel_values": batch.image.content if self.config.use_image else None,
         }
         return self._model(**inputs)

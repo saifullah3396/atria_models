@@ -20,31 +20,32 @@ Version: 1.0.0
 License: MIT
 """
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Union
+from __future__ import annotations
 
-from atria_core.transforms import DataTransformsDict
-from atria_core.types import TaskType
+from typing import TYPE_CHECKING, Any
+
+from atria_core.types import DocumentInstance, ImageInstance, TaskType
+from atria_registry.registry_config import RegistryConfig
+from pydantic import BaseModel
 
 from atria_models.core.atria_model import AtriaModel
+from atria_models.core.local_model import LocalModel
 from atria_models.core.timm_model import TimmModel
 from atria_models.core.torchvision_model import TorchHubModel
 from atria_models.core.transformers_model import ImageClassificationModel
-from atria_models.data_types.outputs import ClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import MetricInitializer
+from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.registry import MODEL_PIPELINE
-from atria_models.utilities.checkpoints import CheckpointConfig
-from atria_models.utilities.nn_modules import AtriaModelDict, _get_logits_from_output
 
 if TYPE_CHECKING:
-    from atria_core.types import DocumentInstance, ImageInstance
+    from typing import TYPE_CHECKING, Any
 
-SupportedBatchDataTypes = Union["DocumentInstance", "ImageInstance"]
+    from atria_models.data_types.outputs import ClassificationModelOutput
+
+SupportedBatchDataTypes = DocumentInstance | ImageInstance
 
 
-@dataclass
-class MixupConfig:
+class MixupConfig(BaseModel):
     """
     Configuration for mixup augmentation.
 
@@ -71,6 +72,11 @@ class MixupConfig:
     label_smoothing: float = 0.1
 
 
+class ImageClassificationPipelineConfig(AtriaModelPipelineConfig):
+    model: TimmModel | TorchHubModel | ImageClassificationModel | LocalModel
+    mixup_config: MixupConfig | None = None
+
+
 @MODEL_PIPELINE.register(
     "image_classification",
     defaults=[
@@ -79,12 +85,12 @@ class MixupConfig:
         {"/data_transform@runtime_transforms.train": "image/default"},
         {"/data_transform@runtime_transforms.evaluation": "image/default"},
     ],
-    metrics=[
-        MetricInitializer(name="accuracy"),
-        MetricInitializer(name="precision"),
-        MetricInitializer(name="recall"),
-        MetricInitializer(name="f1_score"),
-        MetricInitializer(name="confusion_matrix"),
+    metric_configs=[
+        RegistryConfig(name="accuracy"),
+        RegistryConfig(name="precision"),
+        RegistryConfig(name="recall"),
+        RegistryConfig(name="f1_score"),
+        RegistryConfig(name="confusion_matrix"),
     ],
 )
 class ImageClassificationPipeline(ClassificationPipeline):
@@ -102,38 +108,12 @@ class ImageClassificationPipeline(ClassificationPipeline):
         metric_factory (Optional[Dict[str, Callable]]): Factory for metrics.
     """
 
-    _TASK_TYPE: TaskType = TaskType.image_classification
-
-    def __init__(
-        self,
-        model: TimmModel | TorchHubModel | ImageClassificationModel,
-        checkpoint_configs: list[CheckpointConfig] | None = None,
-        mixup_config: MixupConfig | None = None,
-        metrics: list[MetricInitializer] | None = None,
-        runtime_transforms: DataTransformsDict = DataTransformsDict(),
-    ):
-        """
-        Initialize the ImageClassificationPipeline.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
-            mixup_config (Optional[MixupConfig]): Configuration for mixup augmentation.
-            runtime_transforms (Optional[DataTransformsDict]): Runtime data transformations.
-            metric_factory (Optional[Dict[str, Callable]]): Factory for metrics.
-        """
-        self._mixup_config = mixup_config
-
-        super().__init__(
-            model=model,
-            checkpoint_configs=checkpoint_configs,
-            metric_configs=metrics,
-            runtime_transforms=runtime_transforms,
-        )
+    __config_cls__ = ImageClassificationPipelineConfig
+    __task_type__: TaskType = TaskType.image_classification
 
     def training_step(
         self, batch: SupportedBatchDataTypes, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Perform a single training step.
 
@@ -144,7 +124,9 @@ class ImageClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output containing loss, logits, and labels.
         """
+
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
         if self._mixup is not None:
             batch.image.content, batch.gt.classification.label.value = self._mixup(
@@ -156,25 +138,26 @@ class ImageClassificationPipeline(ClassificationPipeline):
             loss=loss, logits=logits, label=batch.gt.classification.label
         )
 
-    def _build_model(self) -> AtriaModel | AtriaModelDict:
+    def _build_model(self) -> AtriaModel:
         """
         Build the model and configure loss functions.
 
         Returns:
             Union[AtriaModel, AtriaModelDict]: The built model or dictionary of models.
         """
+
         from timm.data.mixup import Mixup
         from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
         from torch import nn
 
         self._mixup: Mixup = None
-        if self._mixup_config is not None:
+        if self.config.mixup_config is not None:
             self._mixup = Mixup(
                 num_classes=len(self._dataset_metadata.dataset_labels.classification),
-                mixup_alpha=self._mixup_config.mixup_alpha,
-                cutmix_alpha=self._mixup_config.cutmix_alpha,
-                cutmix_minmax=self._mixup_config.cutmix_minmax,
-                label_smoothing=self._mixup_config.label_smoothing,
+                mixup_alpha=self.config.mixup_config.mixup_alpha,
+                cutmix_alpha=self.config.mixup_config.cutmix_alpha,
+                cutmix_minmax=self.config.mixup_config.cutmix_minmax,
+                label_smoothing=self.config.mixup_config.label_smoothing,
             )
         if self._mixup is not None:
             self._loss_fn_train = (
@@ -188,7 +171,7 @@ class ImageClassificationPipeline(ClassificationPipeline):
 
         return super()._build_model()
 
-    def _model_forward(self, batch: Union["ImageInstance", "DocumentInstance"]) -> Any:
+    def _model_forward(self, batch: ImageInstance | DocumentInstance) -> Any:
         """
         Forward pass through the model.
 

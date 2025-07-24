@@ -21,19 +21,21 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from functools import cached_property, wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from atria_core.logger import get_logger
 from atria_core.transforms.base import DataTransformsDict
 from atria_core.types import TrainingStage
 from atria_registry.registry_config import RegistryConfig
 from omegaconf import OmegaConf
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
+from atria_models.core.atria_model import AtriaModel
 from atria_models.utilities.checkpoints import CheckpointConfig
 
 if TYPE_CHECKING:
@@ -42,7 +44,6 @@ if TYPE_CHECKING:
     from ignite.contrib.handlers import TensorboardLogger
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
-    from torch import nn
 
     from atria_models.data_types.outputs import ModelOutput
     from atria_models.utilities.nn_modules import AtriaModelDict
@@ -58,7 +59,9 @@ class AtriaModelPipelineConfig(BaseModel):
     It includes fields for model, checkpoint configurations, metric configurations, and runtime transforms.
     """
 
-    model_config: AtriaModelConfig | dict[str, AtriaModelConfig]
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    model: AtriaModel | dict[str, AtriaModel]
     checkpoint_configs: list[CheckpointConfig] | None = None
     metric_configs: list[RegistryConfig] | None = None
     runtime_transforms: DataTransformsDict = DataTransformsDict()
@@ -99,7 +102,27 @@ class ModelConfigMixin:
             )
 
         return OmegaConf.to_container(
-            OmegaConf.create(builds(self.__class__, populate_full_signature=True))
+            OmegaConf.create(
+                builds(
+                    self.__class__,
+                    populate_full_signature=True,
+                    model={
+                        key: value.build_config
+                        for key, value in self._config.model.items()
+                    }
+                    if isinstance(self._config.model, dict)
+                    else self._config.model.build_config,
+                    checkpoint_configs=self._config.checkpoint_configs
+                    if self._config.checkpoint_configs is not None
+                    else None,
+                    metric_configs=self._config.metric_configs
+                    if self._config.metric_configs is not None
+                    else None,
+                    runtime_transforms=self._config.runtime_transforms.build_config
+                    if self._config.runtime_transforms is not None
+                    else None,
+                )
+            )
         )
 
     @cached_property
@@ -138,18 +161,12 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         _REQUIRED_MODEL_KEYS (List[str]): Required keys for the model builder dictionary.
     """
 
-    _REQUIRES_MODEL_DICT: ClassVar[bool] = False
-    _REQUIRED_MODEL_KEYS: ClassVar[list[str]] = []
-    _TASK_TYPE: "TaskType"
+    __config_cls__ = AtriaModelPipelineConfig
+    __requires_model_dict__: ClassVar[bool] = False
+    __required_model_dict_keys__: ClassVar[list[str]] = []
+    __task_type__: TaskType
 
     def __init__(self, **kwargs: Any):
-        """
-        Initializes the AtriaModelPipeline instance.
-
-        Args:
-            model (Union[AtriaModel, Dict[str, AtriaModel]]): The model or dictionary of models.
-            checkpoint_configs (Optional[List[CheckpointConfig]]): List of checkpoint configurations.
-        """
         super().__init__(**kwargs)
 
         self._metrics = {}
@@ -158,7 +175,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         self._progress_bar = None
         self._is_built = False
         self._apply_runtime_transforms = False
-        self._model: nn.Module = None
+        self._model: torch.nn.Module | AtriaModelDict = None
         self._validate_model_config()
 
     def __init_subclass__(cls):
@@ -172,7 +189,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         @wraps(original_training_step)
         def wrapped_training_step(
             self: AtriaModelPipeline,
-            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            batch: BaseDataInstance | list[BaseDataInstance],
             **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
@@ -181,7 +198,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         @wraps(original_evaluation_step)
         def wrapped_evaluation_step(
             self: AtriaModelPipeline,
-            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            batch: BaseDataInstance | list[BaseDataInstance],
             **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
@@ -190,7 +207,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         @wraps(original_predict_step)
         def wrapped_predict_step(
             self: AtriaModelPipeline,
-            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            batch: BaseDataInstance | list[BaseDataInstance],
             **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
@@ -199,7 +216,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         @wraps(original_visualization_step)
         def wrapped_visualization_step(
             self: AtriaModelPipeline,
-            batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+            batch: BaseDataInstance | list[BaseDataInstance],
             **kwargs,
         ):
             batch = self._transform_batch(batch, transform_type="evaluation")
@@ -211,14 +228,14 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         cls.visualization_step = wrapped_visualization_step
 
     @property
-    def task_type(self) -> "TaskType":
+    def task_type(self) -> TaskType:
         """
         Returns the task type of the model pipeline
 
         Returns:
             TaskType: The task type.
         """
-        return self._TASK_TYPE
+        return self.__task_type__
 
     @property
     def model_name(self) -> str:
@@ -228,11 +245,9 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         Returns:
             str: The model name.
         """
-        if isinstance(self.config.model_config, dict):
-            return ",".join(
-                [cfg.model_name for cfg in self.config.model_config.values()]
-            )
-        return self.config.model_config.model_name
+        if isinstance(self.config.model, dict):
+            return ",".join([cfg.model_name for cfg in self.config.model.values()])
+        return self.config.model.model_name
 
     @property
     def pipeline_name(self) -> str:
@@ -245,7 +260,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         return self.__class__.__name__
 
     @property
-    def model(self) -> Union["torch.nn.Module", "AtriaModelDict"]:
+    def model(self) -> torch.nn.Module | AtriaModelDict:
         """
         Returns the underlying PyTorch model.
 
@@ -265,7 +280,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         return self._metrics
 
     @property
-    def ema_modules(self) -> Union["torch.nn.Module", dict[str, "torch.nn.Module"]]:
+    def ema_modules(self) -> torch.nn.Module | dict[str, torch.nn.Module]:
         """
         Returns the Exponential Moving Average (EMA) modules.
 
@@ -281,7 +296,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         )
 
     @property
-    def progress_bar(self) -> "ProgressBar":
+    def progress_bar(self) -> ProgressBar:
         """
         Returns the progress bar for the model.
 
@@ -291,7 +306,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         return self._progress_bar
 
     @progress_bar.setter
-    def progress_bar(self, progress_bar: "ProgressBar") -> None:
+    def progress_bar(self, progress_bar: ProgressBar) -> None:
         """
         Sets the progress bar for the model.
 
@@ -314,8 +329,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
     def build(
         self,
-        dataset_metadata: Optional["DatasetMetadata"],
-        tb_logger: Optional["TensorboardLogger"] = None,
+        dataset_metadata: DatasetMetadata | None,
+        tb_logger: TensorboardLogger | None = None,
     ) -> None:
         """
         Builds the model using the provided dataset metadata and Tensorboard logger.
@@ -374,9 +389,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         self.load_state_dict(checkpoint)
         return self
 
-    def to_device(
-        self, device: Union[str, "torch.device"], sync_bn: bool = False
-    ) -> None:
+    def to_device(self, device: str | torch.device, sync_bn: bool = False) -> None:
         from atria_models.utilities.nn_modules import AtriaModelDict, _module_to_device
 
         if isinstance(self._model, AtriaModelDict):
@@ -454,7 +467,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
         return self
 
-    def optimizer_parameters(self) -> Mapping[str, list["torch.nn.Parameter"]]:
+    def optimizer_parameters(self) -> Mapping[str, list[torch.nn.Parameter]]:
         """
         Retrieves the optimizer parameters for the model.
 
@@ -581,12 +594,12 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         pipeline_name: str,
         model: str,
         model_name: str,
-        dataset_metadata: "DatasetMetadata",
+        dataset_metadata: DatasetMetadata,
         provider: str | None = None,
         overrides: list[str] | None = None,
         search_pkgs: list[str] | None = None,
-        tb_logger: Optional["TensorboardLogger"] = None,
-    ) -> "AtriaModelPipeline":
+        tb_logger: TensorboardLogger | None = None,
+    ) -> AtriaModelPipeline:
         """
         Loads a model pipeline from the registry.
 
@@ -601,6 +614,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         from atria_models.registry import MODEL_PIPELINE
 
         overrides = overrides or []
+        if search_pkgs is None:
+            search_pkgs = ["atria_transforms"]
         model_pipeline: AtriaModelPipeline = MODEL_PIPELINE.load_from_registry(
             pipeline_name,
             provider=provider,
@@ -637,7 +652,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
     @classmethod
     def load_from_hub(
         cls, name: str, override_config: dict | None = None
-    ) -> "AtriaModelPipeline":
+    ) -> AtriaModelPipeline:
         from atria_registry.utilities import _instantiate_object_from_config
 
         from atria_models.utilities.checkpoints import _bytes_to_checkpoint
@@ -683,9 +698,9 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
     def _transform_batch(
         self,
-        batch: Union["BaseDataInstance", list["BaseDataInstance"]],
+        batch: BaseDataInstance | list[BaseDataInstance],
         transform_type: str = "train",
-    ) -> "BaseDataInstance":
+    ) -> BaseDataInstance:
         """
         Hook to be called before the training step.
         Override this method in subclasses to implement custom behavior.
@@ -710,11 +725,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
     @abstractmethod
     def training_step(
-        self,
-        batch: "BaseDataInstance",
-        training_engine: Optional["Engine"] = None,
-        **kwargs,
-    ) -> "ModelOutput":
+        self, batch: BaseDataInstance, training_engine: Engine | None = None, **kwargs
+    ) -> ModelOutput:
         """
         Defines the training step for the model.
 
@@ -730,12 +742,12 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
     @abstractmethod
     def evaluation_step(
         self,
-        batch: "BaseDataInstance",
-        evaluation_engine: Optional["Engine"] = None,
-        training_engine: Optional["Engine"] = None,
+        batch: BaseDataInstance,
+        evaluation_engine: Engine | None = None,
+        training_engine: Engine | None = None,
         stage: TrainingStage = TrainingStage.test,
         **kwargs,
-    ) -> "ModelOutput":
+    ) -> ModelOutput:
         """
         Defines the evaluation step for the model.
 
@@ -752,11 +764,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
     @abstractmethod
     def predict_step(
-        self,
-        batch: "BaseDataInstance",
-        evaluation_engine: Optional["Engine"] = None,
-        **kwargs,
-    ) -> "ModelOutput":
+        self, batch: BaseDataInstance, evaluation_engine: Engine | None = None, **kwargs
+    ) -> ModelOutput:
         """
         Defines the prediction step for the model.
 
@@ -771,9 +780,9 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
     def visualization_step(
         self,
-        batch: "BaseDataInstance",
-        evaluation_engine: Optional["Engine"] = None,
-        training_engine: Optional["Engine"] = None,
+        batch: BaseDataInstance,
+        evaluation_engine: Engine | None = None,
+        training_engine: Engine | None = None,
         **kwargs,
     ) -> None:
         """
@@ -819,23 +828,21 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         Raises:
             AssertionError: If the model does not meet the required criteria.
         """
-        if self._REQUIRES_MODEL_DICT:
-            assert isinstance(self.config.model_config, dict), (
+        if self.__requires_model_dict__:
+            assert isinstance(self.config.model, dict), (
                 f"Model builder must be provided as a dictionary of "
-                f"{AtriaModelConfig} when _REQUIRES_MODEL_DICT is True"
+                f"{AtriaModel} when _REQUIRES_MODEL_DICT is True"
             )
-            for key in self._REQUIRED_MODEL_KEYS:
-                assert key in self.config.model_config, (
-                    f"Input model dictionary {self.config.model_config} must contain the key {key}"
+            for key in self.__required_model_dict_keys__:
+                assert key in self.config.model, (
+                    f"Input model dictionary {self.config.model} must contain the key {key}"
                 )
         else:
-            assert isinstance(self.config.model_config, AtriaModelConfig), (
-                f"Expected model type to be {AtriaModelConfig}, but got {type(self.config.model_config)}"
+            assert isinstance(self.config.model, AtriaModel), (
+                f"Expected model type to be {AtriaModel}, but got {type(self.config.model)}"
             )
 
-    def _build_metrics(
-        self, device: Union[str, "torch.device"] = "cpu"
-    ) -> dict[str, Callable]:
+    def _build_metrics(self, device: str | torch.device = "cpu") -> dict[str, Callable]:
         """
         Builds metrics for the model using the provided metric factory.
 
@@ -871,7 +878,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
             metrics[metric_config.name] = metric_factory(**kwargs)
         return metrics
 
-    def _build_model(self) -> Union["AtriaModel", "AtriaModelDict"]:
+    def _build_model(self) -> AtriaModel | AtriaModelDict:
         """
         Builds the model using the provided model builders.
 
@@ -881,18 +888,18 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         from torch import nn
 
         model_kwargs = self._prepare_build_kwargs()
-        if isinstance(self._model, dict):
+        if isinstance(self.config.model, dict):
             assert isinstance(model_kwargs, dict), (
                 "Model kwargs must be provided as a dictionary when model_factory is a dictionary"
             )
-            assert sorted(model_kwargs.keys()) == sorted(self._model.keys()), (
+            assert sorted(model_kwargs.keys()) == sorted(self.config.model.keys()), (
                 f"Model kwargs must be a dictionary with the same keys as the model builders. "
-                f"Got {model_kwargs.keys()} and {self._model.keys()}"
+                f"Got {model_kwargs.keys()} and {self.config.model.keys()}"
             )
 
             trainable_models = {}
             non_trainable_models = {}
-            for key, m in self._model.items():
+            for key, m in self.config.model.items():
                 m = m.build(**model_kwargs[key])
                 if not m.is_frozen:
                     trainable_models[key] = m
@@ -904,7 +911,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
                 non_trainable_models=nn.ModuleDict(non_trainable_models),
             )
         else:
-            return self._model.build(**model_kwargs)
+            return self.config.model.build(**model_kwargs)
 
     def _prepare_build_kwargs(self) -> dict[str, dict[str, Any]] | dict[str, Any]:
         """

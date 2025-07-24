@@ -21,17 +21,18 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from atria_core.logger import get_logger
 from atria_core.types import DocumentInstance, ImageInstance
 
-from atria_models.core.atria_model import AtriaModel
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
-from atria_models.utilities.nn_modules import AtriaModelDict, _get_logits_from_output
 
 if TYPE_CHECKING:
+    from atria_models.core.atria_model import AtriaModel
     from atria_models.data_types.outputs import ClassificationModelOutput
 
 logger = get_logger(__name__)
@@ -53,7 +54,7 @@ class ClassificationPipeline(AtriaModelPipeline):
 
     def training_step(
         self, batch: SupportedBatchDataTypes, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single training step.
 
@@ -64,7 +65,9 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
+
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_train(logits, batch.gt.classification.label.value)
@@ -74,7 +77,7 @@ class ClassificationPipeline(AtriaModelPipeline):
 
     def evaluation_step(
         self, batch: SupportedBatchDataTypes, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single evaluation step.
 
@@ -85,7 +88,9 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
+
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_eval(logits, batch.gt.classification.label.value)
@@ -95,7 +100,7 @@ class ClassificationPipeline(AtriaModelPipeline):
 
     def predict_step(
         self, batch: SupportedBatchDataTypes, **kwargs
-    ) -> "ClassificationModelOutput":
+    ) -> ClassificationModelOutput:
         """
         Performs a single prediction step.
 
@@ -106,20 +111,16 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
+
         from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
         return ClassificationModelOutput(
             logits=logits, prediction=logits.argmax(dim=-1)
         )
 
-    def _build_model(self) -> AtriaModel | AtriaModelDict:
-        """
-        Builds the model for the classification pipeline.
-
-        Returns:
-            Union[AtriaModel, AtriaModelDict]: The built model or a dictionary of models.
-        """
+    def _build_model(self) -> AtriaModel:
         import torch
 
         self._loss_fn_train = torch.nn.CrossEntropyLoss()
@@ -133,6 +134,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             Dict[str, Dict[str, Any]] | Dict[str, Any]: The prepared keyword arguments.
         """
+
         if self._dataset_metadata is None:
             return {}
         assert self._dataset_metadata.dataset_labels.classification is not None, (
@@ -156,6 +158,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         Returns:
             Any: The output of the model.
         """
+
         raise NotImplementedError(
             "The _model_forward method must be implemented in subclasses."
         )
