@@ -22,6 +22,5 @@ if [[ -z "$PROJECT_ROOT" ]]; then
     exit 1
 fi
 
-export PYTHONPATH="$PROJECT_ROOT/src:"
 
-python $SCRIPT_DIR/../src/atria_models/build_registry.py
+uv run python $SCRIPT_DIR/../src/atria_models/build_registry.py

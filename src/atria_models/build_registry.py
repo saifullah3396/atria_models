@@ -8,6 +8,7 @@ from atria_models.core.mmdet_model import *  # noqa
 from atria_models.core.timm_model import *  # noqa
 from atria_models.core.torchvision_model import *  # noqa
 from atria_models.core.transformers_model import *  # noqa
+from atria_models.models.layoutlmv3.modeling_layoutlmv3 import *  # noqa
 from atria_models.pipelines.classification.image import *  # noqa
 from atria_models.pipelines.classification.layout_token import *  # noqa
 from atria_models.pipelines.classification.sequence import *  # noqa

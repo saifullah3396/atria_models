@@ -17,11 +17,11 @@ Date: April 14, 2025
 from typing import TYPE_CHECKING
 
 import lazy_loader as lazy
+from atria_models.registry import (
+    MODEL,  # noqa: F401 # Import the registry to ensure it is initialized
+)
 
 if TYPE_CHECKING:
-    from atria_models.registry import (
-        MODEL,  # noqa: F401 # Import the registry to ensure it is initialized
-    )
     from atria_models.core.atria_model import AtriaModel
     from atria_models.core.diffusers_model import DiffusersModel
     from atria_models.core.local_model import LocalModel

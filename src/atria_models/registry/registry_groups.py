@@ -42,13 +42,7 @@ class ModelRegistryGroup(RegistryGroup):
                 self.register_modules(
                     module_paths=decorated_class,
                     module_names=module_name,
-                    zen_meta={
-                        "name": (
-                            model_name + "/" + model_name_pattern
-                            if model_name_pattern
-                            else model_name
-                        )
-                    },
+                    model_name=model_name,
                     **kwargs,
                 )
             elif is_torch_model:
@@ -61,9 +55,8 @@ class ModelRegistryGroup(RegistryGroup):
                 )
                 self.register_modules(
                     module_paths=LocalModel,
-                    module_names=module_name,
-                    model_class=decorated_class,
-                    zen_meta={"name": module_name},
+                    module_names=f"atria/{module_name}",
+                    model_name=decorated_class,
                     **kwargs,
                 )
             else:
