@@ -25,13 +25,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from atria_core.types import DocumentInstance, ImageInstance, TaskType
-from atria_registry.registry_config import RegistryConfig
 from pydantic import BaseModel
 
 from atria_models.core.atria_model import AtriaModel
 from atria_models.core.local_model import LocalModel
 from atria_models.core.timm_model import TimmModel
-from atria_models.core.torchvision_model import TorchHubModel
+from atria_models.core.torchhub_model import TorchHubModel
 from atria_models.core.transformers_model import ImageClassificationModel
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
@@ -40,7 +39,7 @@ from atria_models.registry import MODEL_PIPELINE
 if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any
 
-    from atria_models.data_types.outputs import ClassificationModelOutput
+    from atria_core.types import ClassificationModelOutput
 
 SupportedBatchDataTypes = DocumentInstance | ImageInstance
 
@@ -82,15 +81,13 @@ class ImageClassificationPipelineConfig(AtriaModelPipelineConfig):
     defaults=[
         "_self_",
         {"/model@model": "timm"},
-        {"/data_transform@runtime_transforms.train": "image/default"},
-        {"/data_transform@runtime_transforms.evaluation": "image/default"},
-    ],
-    metric_configs=[
-        RegistryConfig(name="accuracy"),
-        RegistryConfig(name="precision"),
-        RegistryConfig(name="recall"),
-        RegistryConfig(name="f1_score"),
-        RegistryConfig(name="confusion_matrix"),
+        {"/data_transform@runtime_transforms.train": "image_instance_tf/default"},
+        {"/data_transform@runtime_transforms.evaluation": "image_instance_tf/default"},
+        {"/metric@metric_configs.accuracy": "accuracy"},
+        {"/metric@metric_configs.precision": "precision"},
+        {"/metric@metric_configs.recall": "recall"},
+        {"/metric@metric_configs.f1_score": "f1_score"},
+        {"/metric@metric_configs.confusion_matrix": "confusion_matrix"},
     ],
 )
 class ImageClassificationPipeline(ClassificationPipeline):
@@ -125,7 +122,8 @@ class ImageClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output containing loss, logits, and labels.
         """
 
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         if self._mixup is not None:

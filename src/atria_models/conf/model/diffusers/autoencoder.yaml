@@ -1,5 +1,7 @@
 _target_: atria_models.core.diffusers_model.DiffusersAutoencoderModel
-model_name: ???
+_partial_: false
+model_name: null
+config_name: null
 convert_bn_to_gn: false
 is_frozen: false
 frozen_keys_patterns: null

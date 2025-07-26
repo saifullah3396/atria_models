@@ -23,24 +23,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from atria_core.types import TaskType
+from atria_core.types import TaskType, TokenClassificationModelOutput
 
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
-from atria_models.data_types.outputs import TokenClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import (
-    AtriaModelPipelineConfig,
-    RegistryConfig,
-)
+from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 
 if TYPE_CHECKING:
     import torch
+    from atria_core.types import TokenClassificationModelOutput
     from atria_transforms.data_types import TokenizedDocumentInstance
-
-    from atria_models.data_types.outputs import TokenClassificationModelOutput
 
 
 class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
@@ -63,13 +58,13 @@ class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-    ],
-    metric_configs=[
-        RegistryConfig(name="seqeval_accuracy_score"),
-        RegistryConfig(name="seqeval_precision_score"),
-        RegistryConfig(name="seqeval_recall_score"),
-        RegistryConfig(name="seqeval_f1_score"),
-        RegistryConfig(name="seqeval_classification_report"),
+        {"/metric@metric_configs.seqeval_accuracy_score": "seqeval_accuracy_score"},
+        {"/metric@metric_configs.seqeval_precision_score": "seqeval_precision_score"},
+        {"/metric@metric_configs.seqeval_recall_score": "seqeval_recall_score"},
+        {"/metric@metric_configs.seqeval_f1_score": "seqeval_f1_score"},
+        {
+            "/metric@metric_configs.seqeval_classification_report": "seqeval_classification_report"
+        },
     ],
 )
 class TokenClassificationPipeline(ClassificationPipeline):

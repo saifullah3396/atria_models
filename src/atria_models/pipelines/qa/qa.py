@@ -24,14 +24,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from atria_core.types import TaskType
+from atria_core.types import SequenceQAModelOutput, TaskType
 
 from atria_models.core.transformers_model import QuestionAnsweringModel
-from atria_models.data_types.outputs import SequenceQAModelOutput
 from atria_models.pipelines.atria_model_pipeline import (
     AtriaModelPipeline,
     AtriaModelPipelineConfig,
-    RegistryConfig,
 )
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
@@ -61,8 +59,8 @@ class QuestionAnsweringPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/visual_question_answering"
         },
+        {"/metric@metric_configs.sequence_anls": "sequence_anls"},
     ],
-    metric_configs=[RegistryConfig(name="sequence_anls")],
 )
 class QuestionAnsweringPipeline(AtriaModelPipeline):
     """

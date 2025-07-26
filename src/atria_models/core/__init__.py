@@ -9,7 +9,7 @@ Submodules:
     - local_model: Provides support for local PyTorch models.
     - mmdet_model: Integrates models from the MMDetection library.
     - timm_model: Includes models from the Timm library.
-    - torchvision_model: Offers models from the TorchVision library.
+    - torchhub_model: Offers models from the TorchVision library.
 
 Author: Your Name (your.email@example.com)
 Date: April 14, 2025

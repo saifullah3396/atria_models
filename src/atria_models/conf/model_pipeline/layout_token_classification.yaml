@@ -1,13 +1,10 @@
 _target_: atria_models.pipelines.classification.layout_token.LayoutTokenClassificationPipeline
-metric_configs:
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: layout_precision
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: layout_recall
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: layout_f1
+_partial_: false
 defaults:
-- _self_
 - /model@model: transformers/token_classification
 - /data_transform@runtime_transforms.train: document_instance_tokenizer/sequence_classification
 - /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/sequence_classification
+- /metric@metric_configs.layout_precision: layout_precision
+- /metric@metric_configs.layout_recall: layout_recall
+- /metric@metric_configs.layout_f1: layout_f1
+- _self_

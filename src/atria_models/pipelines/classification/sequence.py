@@ -23,15 +23,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from atria_core.types import TaskType
+from atria_core.types import ClassificationModelOutput, TaskType
 
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import SequenceClassificationModel
-from atria_models.data_types.outputs import ClassificationModelOutput
-from atria_models.pipelines.atria_model_pipeline import (
-    AtriaModelPipelineConfig,
-    RegistryConfig,
-)
+from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
@@ -60,13 +56,11 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-    ],
-    metric_configs=[
-        RegistryConfig(name="accuracy"),
-        RegistryConfig(name="precision"),
-        RegistryConfig(name="recall"),
-        RegistryConfig(name="f1_score"),
-        RegistryConfig(name="confusion_matrix"),
+        {"/metric@metric_configs.accuracy": "accuracy"},
+        {"/metric@metric_configs.precision": "precision"},
+        {"/metric@metric_configs.recall": "recall"},
+        {"/metric@metric_configs.f1_score": "f1_score"},
+        {"/metric@metric_configs.confusion_matrix": "confusion_matrix"},
     ],
 )
 class SequenceClassificationPipeline(ClassificationPipeline):
@@ -100,7 +94,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         if self.config.training_overflow_strategy == OverflowStrategy.select_all:
@@ -127,7 +122,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
@@ -154,7 +150,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:

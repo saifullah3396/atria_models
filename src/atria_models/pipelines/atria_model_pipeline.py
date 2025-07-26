@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from atria_core.logger import get_logger
 from atria_core.transforms.base import DataTransformsDict
 from atria_core.types import TrainingStage
-from atria_registry.registry_config import RegistryConfig
+from atria_metrics import MetricBuilder
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict
 
@@ -40,12 +40,16 @@ from atria_models.utilities.checkpoints import CheckpointConfig
 
 if TYPE_CHECKING:
     import torch
-    from atria_core.types import BaseDataInstance, DatasetMetadata, TaskType
+    from atria_core.types import (
+        BaseDataInstance,
+        DatasetMetadata,
+        ModelOutput,
+        TaskType,
+    )
     from ignite.contrib.handlers import TensorboardLogger
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
 
-    from atria_models.data_types.outputs import ModelOutput
     from atria_models.utilities.nn_modules import AtriaModelDict
 
 logger = get_logger(__name__)
@@ -59,11 +63,12 @@ class AtriaModelPipelineConfig(BaseModel):
     It includes fields for model, checkpoint configurations, metric configurations, and runtime transforms.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
+    name: str | None = None
     model: AtriaModel | dict[str, AtriaModel]
     checkpoint_configs: list[CheckpointConfig] | None = None
-    metric_configs: list[RegistryConfig] | None = None
+    metric_builders: dict[str, MetricBuilder] | None = None
     runtime_transforms: DataTransformsDict = DataTransformsDict()
 
 
@@ -77,6 +82,7 @@ class ModelConfigMixin:
             "that is a subclass of ModelPipelineConfig."
         )
         self._config = config_cls(**kwargs)
+        self._build_config = None
         super().__init__()
 
     def __init_subclass__(cls, **kwargs):
@@ -101,7 +107,7 @@ class ModelConfigMixin:
                 f"{self.__class__.__name__} must define a __config_cls__ attribute."
             )
 
-        return OmegaConf.to_container(
+        self._build_config = OmegaConf.to_container(
             OmegaConf.create(
                 builds(
                     self.__class__,
@@ -115,8 +121,8 @@ class ModelConfigMixin:
                     checkpoint_configs=self._config.checkpoint_configs
                     if self._config.checkpoint_configs is not None
                     else None,
-                    metric_configs=self._config.metric_configs
-                    if self._config.metric_configs is not None
+                    metric_builders=self._config.metric_builders
+                    if self._config.metric_builders is not None
                     else None,
                     runtime_transforms=self._config.runtime_transforms.build_config
                     if self._config.runtime_transforms is not None
@@ -130,8 +136,10 @@ class ModelConfigMixin:
         return self._config
 
     @cached_property
-    def build_config(self) -> AtriaModelPipelineConfig:
-        return self.prepare_build_config()
+    def build_config(self) -> dict:
+        if self._build_config is None:
+            self.prepare_build_config()
+        return self._build_config
 
     @cached_property
     def config_hash(self) -> str:
@@ -169,7 +177,6 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
 
-        self._metrics = {}
         self._dataset_metadata = None
         self._tb_logger = None
         self._progress_bar = None
@@ -351,6 +358,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
             idist.barrier()
 
         self._model = _validate_built_model(self._build_model())
+        self.prepare_build_config()
 
         if self.config.checkpoint_configs is not None:
             CheckpointManager.load_checkpoints(
@@ -359,8 +367,6 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
 
         if idist.get_rank() == 0:
             idist.barrier()
-
-        self._metrics = self._build_metrics()
 
         self._is_built = True
 
@@ -512,7 +518,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
             )
         else:
             state_dict["model"] = self.model.state_dict()
-        state_dict["config"] = OmegaConf.to_container(self.build_config)
+        state_dict["config"] = self.build_config
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
@@ -705,12 +711,12 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         Hook to be called before the training step.
         Override this method in subclasses to implement custom behavior.
         """
-        transform = (
-            self._runtime_transforms.train
-            if transform_type == "train"
-            else self._runtime_transforms.evaluation
-        )
         if self._apply_runtime_transforms:
+            transform = (
+                self.config.runtime_transforms.train
+                if transform_type == "train"
+                else self.config.runtime_transforms.evaluation
+            )
             if transform is None:
                 raise ValueError(
                     "You have enabled runtime transforms, but no transform is defined "
@@ -719,7 +725,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
             assert isinstance(batch, list) and not any(x.is_batched for x in batch), (
                 "Batch must be a list of untransformed BaseDataInstance when applying runtime transforms."
             )
-            batch = [transform(sample).load().to_tensor() for sample in batch]
+            batch = [transform(sample).to_tensor() for sample in batch]
             batch = batch[0].batched(batch)
         return batch
 
@@ -842,25 +848,19 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
                 f"Expected model type to be {AtriaModel}, but got {type(self.config.model)}"
             )
 
-    def _build_metrics(self, device: str | torch.device = "cpu") -> dict[str, Callable]:
+    def _build_metrics(self, device) -> dict[str, Callable]:
         """
         Builds metrics for the model using the provided metric factory.
 
         Raises:
             ValueError: If the metric factory is not a dictionary.
         """
-        import inspect
 
         metrics = {}
-        for metric_config in self.config.metric_configs:
-            import copy
-
-            from atria_metrics import METRIC
-
-            metric_factory = METRIC.load_from_registry(metric_config.name)
-            possible_args = inspect.signature(metric_factory).parameters
-            kwargs = copy.deepcopy(metric_config.kwargs)
-            if "num_classes" in possible_args:
+        for key, metric_builder in self.config.metric_builders.items():
+            kwargs = {}
+            metric_builder.get_possible_args()
+            if "num_classes" in metric_builder.get_possible_args():
                 assert self._dataset_metadata is not None, (
                     "Dataset metadata must be provided to determine the number of classes."
                 )
@@ -873,9 +873,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
                 kwargs["num_classes"] = len(
                     self._dataset_metadata.dataset_labels.classification
                 )
-            if "device" in possible_args:
                 kwargs["device"] = device
-            metrics[metric_config.name] = metric_factory(**kwargs)
+            metrics[key] = metric_builder(**kwargs)
         return metrics
 
     def _build_model(self) -> AtriaModel | AtriaModelDict:

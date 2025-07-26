@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from inspect import isclass
 from typing import TYPE_CHECKING
 
 from atria_registry import RegistryGroup
 
 if TYPE_CHECKING:
     from atria_models.core.atria_model import AtriaModelConfig
+    from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 
 
 class ModelRegistryGroup(RegistryGroup):
@@ -17,7 +19,11 @@ class ModelRegistryGroup(RegistryGroup):
     """
 
     def register(
-        self, name: str, configs: list[AtriaModelConfig] | None = None, **kwargs
+        self,
+        name: str,
+        configs: list[AtriaModelConfig] | None = None,
+        builds_to_file_store: bool = True,
+        **kwargs,
     ):
         """
         Decorator for registering a module with configurations.
@@ -30,68 +36,120 @@ class ModelRegistryGroup(RegistryGroup):
             function: A decorator function for registering the module with configurations.
         """
 
-        def decorator(decorated_class):
+        if builds_to_file_store and not self._file_store_build_enabled:
+
+            def noop_(module):
+                return module
+
+            return noop_
+
+        # get spec params
+        provider = kwargs.pop("provider", None)
+        is_global_package = kwargs.pop("is_global_package", False)
+        registers_target = kwargs.pop("registers_target", True)
+        defaults = kwargs.pop("defaults", None)
+        assert defaults is None, "Dataset registry does not support defaults."
+
+        def decorator(module):
+            from atria_registry.module_spec import ModuleSpec
+
             from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
             from atria_models.core.local_model import LocalModel
 
-            module_path = decorated_class
-            module_name = name
-            config_cls = None
-            config_cls_kwargs = {}
+            # build the module spec
+            module_spec = ModuleSpec(
+                module=module,
+                name=name,
+                group=self.name,
+                provider=provider or self._default_provider,
+                is_global_package=is_global_package,
+                registers_target=registers_target,
+                defaults=defaults,
+            )
 
-            if not issubclass(decorated_class, AtriaModel):
-                from torch import nn
+            if isclass(module):
+                if not issubclass(module, AtriaModel):
+                    from torch import nn
 
-                if issubclass(decorated_class, nn.Module):
-                    module_path = LocalModel
-                    module_name = f"atria/{module_name}"
-                    config_cls = LocalModel.__config_cls__
-                    config_cls_kwargs = {"model_class": decorated_class}
+                    assert issubclass(module, nn.Module), (
+                        f"Only AtriaModel or torch.nn.Module can be registered. {module} is not a subclass of AtriaModel or torch.nn.Module."
+                    )
+
+                    # this is a parameter of the LocalModelConfig not to be confused with the module parameter for the
+                    # registry, we pass it to the LocalModelConfig to instantiate the model
+                    config = LocalModel.__config_cls__(
+                        module=module_spec.module
+                    )  # we first pass it to config then replace it!!
+                    module_spec.module = LocalModel
+                    module_spec.name = f"atria/{module_spec.name}"
+                    module_spec.model_extra.update(
+                        {k: getattr(config, k) for k in config.__class__.model_fields}
+                    )
                 else:
-                    raise TypeError(
-                        f"Only AtriaModel or torch.nn.Module can be registered. {decorated_class} is not a subclass of AtriaModel or torch.nn.Module."
+                    config = module.__config_cls__()
+                    module_spec.model_extra.update(
+                        {k: getattr(config, k) for k in config.__class__.model_fields}
                     )
-            else:
-                config_cls = decorated_class.__config_cls__
 
-            if configs is not None:
-                assert isinstance(configs, list) and all(
-                    isinstance(config, AtriaModelConfig) for config in configs
-                ), (
-                    f"Expected configs to be a list of AtriaModelConfig, got {type(configs)} instead."
-                )
-                for config in configs:
-                    self.register_modules(
-                        module_paths=module_path,
-                        module_names=module_name + "/" + config.name,
-                        **{
-                            k: getattr(config, k) for k in config.__class__.model_fields
-                        },
-                        **kwargs,
+                if configs is not None:
+                    import copy
+
+                    assert isinstance(configs, list) and all(
+                        isinstance(config, AtriaModelConfig) for config in configs
+                    ), (
+                        f"Expected configs to be a list of AtriaModelConfig, got {type(configs)} instead."
                     )
-                return decorated_class
+
+                    for config in configs:
+                        config.model_name = name
+                        config_module_spec = copy.deepcopy(module_spec)
+                        config_module_spec.name = (
+                            config.model_name + "/" + config.config_name
+                        )
+                        config_module_spec.model_extra.update(
+                            {
+                                k: getattr(config, k)
+                                for k in config.__class__.model_fields
+                            }
+                        )
+                        config_module_spec.model_extra.update({**kwargs})
+                        self.register_module(config_module_spec)
+                    return module
+                module_spec.model_extra.update({**kwargs})
+                self.register_module(module_spec)
             else:
-                config = config_cls(**config_cls_kwargs)
-                self.register_modules(
-                    module_paths=module_path,
-                    module_names=module_name,
-                    **{k: getattr(config, k) for k in config.__class__.model_fields},
-                    **kwargs,
+                # we initialize all callable functions as LocalModel which will return
+                # the model class on call
+                config = LocalModel.__config_cls__(
+                    module=module_spec.module
+                )  # we first pass it to config then replace it!!
+                module_spec.module = LocalModel
+                module_spec.name = f"atria/{module_spec.name}"
+                module_spec.model_extra.update(
+                    {k: getattr(config, k) for k in config.__class__.model_fields}
                 )
-                return decorated_class
+                module_spec.model_extra.update({**kwargs})
+                self.register_module(module_spec)
+            return module
 
         return decorator
 
 
 class ModelPipelineRegistryGroup(RegistryGroup):
     """
-    A specialized registry group for managing model pipeline.
+    A specialized registry group for managing models.
 
-    This class provides additional methods for registering and managing pipeline
+    This class provides additional methods for registering and managing models
     within the registry system.
     """
 
-    def register(self, name: str, **kwargs):
+    def register(
+        self,
+        name: str,
+        configs: list[AtriaModelPipelineConfig] | None = None,
+        builds_to_file_store: bool = True,
+        **kwargs,
+    ):
         """
         Decorator for registering a module with configurations.
 
@@ -102,34 +160,60 @@ class ModelPipelineRegistryGroup(RegistryGroup):
         Returns:
             function: A decorator function for registering the module with configurations.
         """
+        if builds_to_file_store and not self._file_store_build_enabled:
 
-        def decorator(decorated_class):
-            if hasattr(decorated_class, "_REGISTRY_CONFIGS"):
-                configs = decorated_class._REGISTRY_CONFIGS
-                assert isinstance(configs, dict), (
-                    f"Expected _REGISTRY_CONFIGS on {decorated_class.__name__} to be a dict, "
-                    f"but got {type(configs).__name__} instead."
+            def noop_(module):
+                return module
+
+            return noop_
+
+        # get spec params
+        provider = kwargs.pop("provider", None)
+        is_global_package = kwargs.pop("is_global_package", False)
+        registers_target = kwargs.pop("registers_target", True)
+        defaults = kwargs.pop("defaults", None)
+
+        def decorator(module):
+            from atria_registry.module_spec import ModuleSpec
+
+            from atria_models.pipelines.atria_model_pipeline import (
+                AtriaModelPipelineConfig,
+            )
+
+            # build the module spec
+            module_spec = ModuleSpec(
+                module=module,
+                name=name,
+                group=self.name,
+                provider=provider or self._default_provider,
+                is_global_package=is_global_package,
+                registers_target=registers_target,
+                defaults=defaults,
+            )
+
+            if configs is not None:
+                import copy
+
+                assert isinstance(configs, list) and all(
+                    isinstance(config, AtriaModelPipelineConfig) for config in configs
+                ), (
+                    f"Expected configs to be a list of RegistryConfig, got {type(configs)} instead."
                 )
-                assert configs, (
-                    f"{decorated_class.__name__} must provide at least one configuration in _REGISTRY_CONFIGS."
-                )
-                for key, config in configs.items():
-                    assert isinstance(config, dict), (
-                        f"Configuration {config} must be a dict."
+                for config in configs:
+                    config_module_spec = copy.deepcopy(module_spec)
+                    config_defaults = config.model_extra.pop("defaults", None)
+                    if config_defaults is not None:
+                        config_module_spec.defaults = config_defaults
+                    config_module_spec.name = (
+                        config_module_spec.name + "/" + config.name
                     )
-                    module_name = name
-                    self.register_modules(
-                        module_paths=decorated_class,
-                        module_names=module_name + "/" + key,
-                        **config,
-                        **kwargs,
+                    config_module_spec.model_extra.update(
+                        {**config.model_extra, **kwargs}
                     )
-                return decorated_class
-            else:
-                module_name = name
-                self.register_modules(
-                    module_paths=decorated_class, module_names=module_name, **kwargs
-                )
-                return decorated_class
+                    self.register_module(config_module_spec)
+                return module
+            module_spec.model_extra.update({**kwargs})
+            self.register_module(module_spec)
+            return module
 
         return decorator

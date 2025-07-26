@@ -24,7 +24,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from atria_core.types import TaskType
-from atria_registry.registry_config import RegistryConfig
 
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
@@ -37,9 +36,8 @@ if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any
 
     import torch
+    from atria_core.types import LayoutTokenClassificationModelOutput
     from atria_transforms.data_types import TokenizedDocumentInstance
-
-    from atria_models.data_types.outputs import LayoutTokenClassificationModelOutput
 
 
 class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
@@ -62,11 +60,9 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-    ],
-    metric_configs=[
-        RegistryConfig(name="layout_precision"),
-        RegistryConfig(name="layout_recall"),
-        RegistryConfig(name="layout_f1"),
+        {"/metric@metric_configs.layout_precision": "layout_precision"},
+        {"/metric@metric_configs.layout_recall": "layout_recall"},
+        {"/metric@metric_configs.layout_f1": "layout_f1"},
     ],
 )
 class LayoutTokenClassificationPipeline(ClassificationPipeline):

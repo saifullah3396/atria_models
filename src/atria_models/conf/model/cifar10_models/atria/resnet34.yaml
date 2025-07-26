@@ -1,6 +1,6 @@
-_target_: atria_models.core.transformers_model.SequenceClassificationModel
+_target_: atria_models.core.local_model.LocalModel
 _partial_: false
-model_name: null
+model_name: resnet34
 config_name: null
 convert_bn_to_gn: false
 is_frozen: false
@@ -8,4 +8,6 @@ frozen_keys_patterns: null
 unfrozen_keys_patterns: null
 pretrained_checkpoint: null
 model_cache_dir: null
-tf_name: ???
+module:
+  path: atria_models.models.cifar10_models.resnet34
+  _target_: hydra_zen.funcs.get_obj

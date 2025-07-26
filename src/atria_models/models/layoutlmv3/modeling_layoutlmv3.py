@@ -26,8 +26,6 @@ from transformers.models.roberta.modeling_roberta import (
 )
 from transformers.utils import logging
 
-from atria_models import MODEL
-
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 logger = logging.get_logger(__name__)
@@ -1178,7 +1176,6 @@ class LayoutLMv3ClassificationHead(nn.Module):
         return x
 
 
-@MODEL.register("layoutlmv3_for_token_classification")
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1280,7 +1277,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         )
 
 
-@MODEL.register("layoutlmv3_for_question_answering")
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1389,7 +1385,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         )
 
 
-@MODEL.register("layoutlmv3_for_sequence_classification")
 class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from atria_models.core.local_model import LocalModel
     from atria_models.core.mmdet_model import MMDetModel
     from atria_models.core.timm_model import TimmModel
-    from atria_models.core.torchvision_model import TorchHubModel
+    from atria_models.core.torchhub_model import TorchHubModel
     from atria_models.core.transformers_model import (
         SequenceClassificationModel,
         TokenClassificationModel,
@@ -55,7 +55,7 @@ __getattr__, __dir__, __all__ = lazy.attach(
         "core.local_model": ["LocalModel"],
         "core.mmdet_model": ["MMDetModel"],
         "core.timm_model": ["TimmModel"],
-        "core.torchvision_model": ["TorchHubModel"],
+        "core.torchhub_model": ["TorchHubModel"],
         "core.transformers_model": [
             "SequenceClassificationModel",
             "TokenClassificationModel",

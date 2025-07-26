@@ -32,8 +32,9 @@ from atria_core.types import DocumentInstance, ImageInstance
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
 
 if TYPE_CHECKING:
+    from atria_core.types import ClassificationModelOutput
+
     from atria_models.core.atria_model import AtriaModel
-    from atria_models.data_types.outputs import ClassificationModelOutput
 
 logger = get_logger(__name__)
 
@@ -66,7 +67,8 @@ class ClassificationPipeline(AtriaModelPipeline):
             ClassificationModelOutput: The output of the training step, including loss and logits.
         """
 
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -89,7 +91,8 @@ class ClassificationPipeline(AtriaModelPipeline):
             ClassificationModelOutput: The output of the evaluation step, including loss and logits.
         """
 
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -112,7 +115,8 @@ class ClassificationPipeline(AtriaModelPipeline):
             ClassificationModelOutput: The output of the prediction step, including logits and predictions.
         """
 
-        from atria_models.data_types.outputs import ClassificationModelOutput
+        from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))

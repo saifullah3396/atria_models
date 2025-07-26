@@ -1,17 +1,12 @@
 _target_: atria_models.pipelines.classification.sequence.SequenceClassificationPipeline
-metric_configs:
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: accuracy
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: precision
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: recall
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: f1_score
-- _target_: atria_registry.registry_config.RegistryConfig
-  name: confusion_matrix
+_partial_: false
 defaults:
-- _self_
 - /model@model: transformers/sequence_classification
 - /data_transform@runtime_transforms.train: document_instance_tokenizer/sequence_classification
 - /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/sequence_classification
+- /metric@metric_configs.accuracy: accuracy
+- /metric@metric_configs.precision: precision
+- /metric@metric_configs.recall: recall
+- /metric@metric_configs.f1_score: f1_score
+- /metric@metric_configs.confusion_matrix: confusion_matrix
+- _self_

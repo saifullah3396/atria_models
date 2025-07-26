@@ -37,10 +37,8 @@ from atria_models.utilities.nn_modules import _unnormalize_image
 
 if TYPE_CHECKING:
     import torch
-    from atria_core.types import DocumentInstance, ImageInstance
+    from atria_core.types import DocumentInstance, ImageInstance, ModelOutput
     from ignite.engine import Engine
-
-    from atria_models.data_types.outputs import ModelOutput
 
 logger = get_logger(__name__)
 
@@ -52,9 +50,7 @@ class AutoEncodingPipelineConfig(AtriaModelPipelineConfig):
     loss_type: str = "l2"
 
 
-MODEL_PIPELINE.register("autoencoding")
-
-
+@MODEL_PIPELINE.register("autoencoding")
 class AutoEncodingPipeline(AtriaModelPipeline):
     def _build_model(self) -> torch.nn.Module:
         """
@@ -87,7 +83,7 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
 
-        from atria_models.data_types.outputs import AutoEncoderModelOutput
+        from atria_core.types import AutoEncoderModelOutput
 
         reconstruction = self.model(batch.image.content)
         loss = self._loss_fn(input=reconstruction, target=batch.image.content)
@@ -107,7 +103,7 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
 
-        from atria_models.data_types.outputs import AutoEncoderModelOutput
+        from atria_core.types import AutoEncoderModelOutput
 
         reconstruction = self.model(batch.image.content)
         loss = self._loss_fn(input=reconstruction, target=batch.image.content)
@@ -127,7 +123,7 @@ class AutoEncodingPipeline(AtriaModelPipeline):
             ModelOutput: Output containing loss, real input, and reconstructed output.
         """
 
-        from atria_models.data_types.outputs import AutoEncoderModelOutput
+        from atria_core.types import AutoEncoderModelOutput
 
         reconstruction = self.model(batch.image.content)
         loss = self._loss_fn(input=reconstruction, target=batch.image.content)

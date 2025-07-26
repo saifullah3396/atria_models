@@ -25,13 +25,17 @@ from typing import TYPE_CHECKING
 
 from atria_core.logger.logger import get_logger
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
 from atria_models.registry import MODEL
 
 if TYPE_CHECKING:
     from torch import nn
 
 logger = get_logger(__name__)
+
+
+class TimmModelConfig(AtriaModelConfig):
+    timm_name: str = "???"
 
 
 @MODEL.register("timm")
@@ -43,6 +47,8 @@ class TimmModel(AtriaModel):
     It supports configurations such as pretraining, freezing layers, and converting
     batch normalization layers to group normalization layers.
     """
+
+    __config_cls__ = TimmModelConfig
 
     def _build(self, *, num_labels: int | None = None, **kwargs) -> "nn.Module":
         """
@@ -60,7 +66,8 @@ class TimmModel(AtriaModel):
         """
         import timm
 
-        build_kwargs = {"model_name": self.config.model_name, **kwargs}
+        self.config: TimmModelConfig
+        build_kwargs = {"model_name": self.config.timm_name, **kwargs}
         if num_labels is not None:
             build_kwargs["num_classes"] = num_labels
         logger.info(

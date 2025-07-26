@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from atria_core.logger.logger import get_logger
 from rich.pretty import pretty_repr
 
-from atria_models.core.atria_model import AtriaModel
+from atria_models.core.atria_model import AtriaModel, AtriaModelConfig
 from atria_models.registry import MODEL
 from atria_models.utilities.nn_modules import (
     _get_last_module,
@@ -40,8 +40,14 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+class TorchHubConfig(AtriaModelConfig):
+    hub_name: str = "???"
+
+
 @MODEL.register("torchhub")
 class TorchHubModel(AtriaModel):
+    __config_cls__ = TorchHubConfig
+
     def _build(self, *, num_labels: int | None = None, **kwargs) -> "Module":
         """
         Constructs the TorchHubModel model.
@@ -52,14 +58,14 @@ class TorchHubModel(AtriaModel):
         import torch
         from torch.nn import Module
 
-        self.config: TorchHubModelConfig
         logger.info(
             f"Initializing {self.__class__.__name__}/{self.config.model_name} with the following config:"
             f"\n{pretty_repr(kwargs, expand_all=True)}"
         )
         os.environ["TORCH_HOME"] = self.config.model_cache_dir
+        self.config: TorchHubConfig
         model: Module = torch.hub.load(
-            "pytorch/vision:v0.10.0", self.config.model_name, verbose=False, **kwargs
+            "pytorch/vision:v0.10.0", self.config.hub_name, verbose=False, **kwargs
         )
         if num_labels is not None:
             from torch.nn import Linear

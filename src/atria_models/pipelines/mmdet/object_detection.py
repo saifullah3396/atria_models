@@ -5,28 +5,31 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from atria_core.logger.logger import get_logger
-from atria_core.types import TaskType, TrainingStage
+from atria_core.types import (
+    MMDetEvaluationOutput,
+    MMDetTrainingOutput,
+    TaskType,
+    TrainingStage,
+)
 from pydantic import Field
 
 from atria_models.core.atria_model import AtriaModel
-from atria_models.data_types.outputs import MMDetEvaluationOutput, MMDetTrainingOutput
 from atria_models.pipelines.atria_model_pipeline import (
     AtriaModelPipeline,
     AtriaModelPipelineConfig,
-    RegistryConfig,
 )
 from atria_models.registry import MODEL_PIPELINE
 
 if TYPE_CHECKING:
-    from atria_core.types import TaskType, TrainingStage
+    from atria_core.types import (
+        MMDetEvaluationOutput,
+        MMDetTrainingOutput,
+        TaskType,
+        TrainingStage,
+    )
     from atria_transforms.core.mmdet import MMDetInput
     from ignite.engine import Engine
     from pydantic import Field
-
-    from atria_models.data_types.outputs import (
-        MMDetEvaluationOutput,
-        MMDetTrainingOutput,
-    )
 
 
 logger = get_logger(__name__)
@@ -63,8 +66,8 @@ class ObjectDetectionPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_mmdet_transform/train"
         },
+        {"/metric@metric_configs.cocoeval": "cocoeval"},
     ],
-    metric_configs=[RegistryConfig(name="cocoeval")],
 )
 class ObjectDetectionPipeline(AtriaModelPipeline):
     """
@@ -108,9 +111,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
     def training_step(
         self, batch: MMDetInput, training_engine: Engine, **kwargs
     ) -> MMDetTrainingOutput:
+        from atria_core.types import MMDetTrainingOutput
         from mmdet.models.detectors import BaseDetector
-
-        from atria_models.data_types.outputs import MMDetTrainingOutput
 
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"
@@ -128,9 +130,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
         self, batch: MMDetInput, stage: TrainingStage, **kwargs
     ) -> MMDetEvaluationOutput:
         import torch
+        from atria_core.types import MMDetEvaluationOutput
         from mmdet.models.detectors import BaseDetector
-
-        from atria_models.data_types.outputs import MMDetEvaluationOutput
 
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"
@@ -154,9 +155,8 @@ class ObjectDetectionPipeline(AtriaModelPipeline):
 
     def predict_step(self, batch: MMDetInput, **kwargs) -> MMDetEvaluationOutput:
         import torch
+        from atria_core.types import MMDetEvaluationOutput
         from mmdet.models.detectors import BaseDetector
-
-        from atria_models.data_types.outputs import MMDetEvaluationOutput
 
         assert isinstance(self._model, BaseDetector), (
             "Model must be an instance of mmdet BaseDetector"

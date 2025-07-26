@@ -19,6 +19,8 @@ Version: 1.0.0
 License: MIT
 """
 
+from collections.abc import Callable
+from inspect import isclass
 from typing import TYPE_CHECKING, Any
 
 from atria_core.logger import get_logger
@@ -33,13 +35,15 @@ logger = get_logger(__name__)
 
 
 class LocalModelConfig(AtriaModelConfig):
-    model_class: type  # The class of the model to be instantiated
+    module: type | Callable  # The class of the model to be instantiated
 
     @model_validator(mode="before")
     @classmethod
     def validate_model_name(cls, values: dict[str, Any]) -> dict[str, Any]:
+        from atria_core.utilities.strings import _convert_to_snake_case
+
         if "model_name" not in values:
-            values["model_name"] = values["model_class"].__name__
+            values["model_name"] = _convert_to_snake_case(values["module"].__name__)
         return values
 
 
@@ -52,7 +56,11 @@ class LocalModel(AtriaModel):
         self.config: LocalModelConfig
 
         # Get the init signature of the model class
-        signature = inspect.signature(self.config.model_class.__init__)
+        signature = (
+            inspect.signature(self.config.module.__init__)
+            if isclass(self.config.module)
+            else inspect.signature(self.config.module)
+        )
         valid_params = signature.parameters
 
         # Filter kwargs to only include valid init parameters
@@ -60,8 +68,8 @@ class LocalModel(AtriaModel):
 
         logger.info(
             "Setting up model %s with kwargs=(%s)",
-            self.config.model_class,
+            self.config.module,
             ", ".join(f"{k}={v!r}" for k, v in filtered_kwargs.items()),
         )
 
-        return self.config.model_class(**filtered_kwargs)
+        return self.config.module(**filtered_kwargs)
