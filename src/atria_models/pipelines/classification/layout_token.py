@@ -23,8 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from atria_core.types import TaskType
-
+from atria_core.types import LayoutTokenClassificationModelOutput, TaskType
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
@@ -36,7 +35,6 @@ if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any
 
     import torch
-    from atria_core.types import LayoutTokenClassificationModelOutput
     from atria_transforms.data_types import TokenizedDocumentInstance
 
 
