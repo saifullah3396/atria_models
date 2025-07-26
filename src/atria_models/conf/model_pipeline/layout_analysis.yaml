@@ -4,5 +4,5 @@ defaults:
 - /model@model: mmdet
 - /data_transform@runtime_transforms.train: document_instance_mmdet_transform/train
 - /data_transform@runtime_transforms.evaluation: document_instance_mmdet_transform/train
-- /metric@metric_configs.cocoeval: cocoeval
+- /metric@metrics.cocoeval: cocoeval
 - _self_

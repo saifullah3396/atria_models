@@ -56,11 +56,11 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-        {"/metric@metric_configs.accuracy": "accuracy"},
-        {"/metric@metric_configs.precision": "precision"},
-        {"/metric@metric_configs.recall": "recall"},
-        {"/metric@metric_configs.f1_score": "f1_score"},
-        {"/metric@metric_configs.confusion_matrix": "confusion_matrix"},
+        {"/metric@metrics.accuracy": "accuracy"},
+        {"/metric@metrics.precision": "precision"},
+        {"/metric@metrics.recall": "recall"},
+        {"/metric@metrics.f1_score": "f1_score"},
+        {"/metric@metrics.confusion_matrix": "confusion_matrix"},
     ],
 )
 class SequenceClassificationPipeline(ClassificationPipeline):

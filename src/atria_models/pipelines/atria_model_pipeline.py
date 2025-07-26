@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from atria_core.logger import get_logger
 from atria_core.transforms.base import DataTransformsDict
 from atria_core.types import TrainingStage
+from atria_core.utilities.repr import RepresentationMixin
 from atria_metrics import MetricBuilder
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict
@@ -68,7 +69,7 @@ class AtriaModelPipelineConfig(BaseModel):
     name: str | None = None
     model: AtriaModel | dict[str, AtriaModel]
     checkpoint_configs: list[CheckpointConfig] | None = None
-    metric_builders: dict[str, MetricBuilder] | None = None
+    metrics: dict[str, MetricBuilder] | None = None
     runtime_transforms: DataTransformsDict = DataTransformsDict()
 
 
@@ -121,8 +122,11 @@ class ModelConfigMixin:
                     checkpoint_configs=self._config.checkpoint_configs
                     if self._config.checkpoint_configs is not None
                     else None,
-                    metric_builders=self._config.metric_builders
-                    if self._config.metric_builders is not None
+                    metric_builders={
+                        key: value.build_config
+                        for key, value in self._config.metrics.items()
+                    }
+                    if self._config.metrics is not None
                     else None,
                     runtime_transforms=self._config.runtime_transforms.build_config
                     if self._config.runtime_transforms is not None
@@ -157,7 +161,7 @@ class ModelConfigMixin:
         ).hexdigest()[:8]
 
 
-class AtriaModelPipeline(ABC, ModelConfigMixin):
+class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
     """
     Abstract base class for task-specific PyTorch models.
 
@@ -855,9 +859,11 @@ class AtriaModelPipeline(ABC, ModelConfigMixin):
         Raises:
             ValueError: If the metric factory is not a dictionary.
         """
+        if self.config.metrics is None:
+            return {}
 
         metrics = {}
-        for key, metric_builder in self.config.metric_builders.items():
+        for key, metric_builder in self.config.metrics.items():
             kwargs = {}
             metric_builder.get_possible_args()
             if "num_classes" in metric_builder.get_possible_args():

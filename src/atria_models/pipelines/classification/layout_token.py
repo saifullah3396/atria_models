@@ -60,9 +60,9 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-        {"/metric@metric_configs.layout_precision": "layout_precision"},
-        {"/metric@metric_configs.layout_recall": "layout_recall"},
-        {"/metric@metric_configs.layout_f1": "layout_f1"},
+        {"/metric@metrics.layout_precision": "layout_precision"},
+        {"/metric@metrics.layout_recall": "layout_recall"},
+        {"/metric@metrics.layout_f1": "layout_f1"},
     ],
 )
 class LayoutTokenClassificationPipeline(ClassificationPipeline):

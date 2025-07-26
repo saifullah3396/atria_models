@@ -58,12 +58,12 @@ class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
         },
-        {"/metric@metric_configs.seqeval_accuracy_score": "seqeval_accuracy_score"},
-        {"/metric@metric_configs.seqeval_precision_score": "seqeval_precision_score"},
-        {"/metric@metric_configs.seqeval_recall_score": "seqeval_recall_score"},
-        {"/metric@metric_configs.seqeval_f1_score": "seqeval_f1_score"},
+        {"/metric@metrics.seqeval_accuracy_score": "seqeval_accuracy_score"},
+        {"/metric@metrics.seqeval_precision_score": "seqeval_precision_score"},
+        {"/metric@metrics.seqeval_recall_score": "seqeval_recall_score"},
+        {"/metric@metrics.seqeval_f1_score": "seqeval_f1_score"},
         {
-            "/metric@metric_configs.seqeval_classification_report": "seqeval_classification_report"
+            "/metric@metrics.seqeval_classification_report": "seqeval_classification_report"
         },
     ],
 )

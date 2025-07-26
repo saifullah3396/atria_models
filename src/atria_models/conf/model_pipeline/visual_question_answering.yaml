@@ -4,5 +4,5 @@ defaults:
 - /model@model: transformers/question_answering
 - /data_transform@runtime_transforms.train: document_instance_tokenizer/visual_question_answering
 - /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/visual_question_answering
-- /metric@metric_configs.sequence_anls: sequence_anls
+- /metric@metrics.sequence_anls: sequence_anls
 - _self_

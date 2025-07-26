@@ -66,7 +66,7 @@ class ObjectDetectionPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_mmdet_transform/train"
         },
-        {"/metric@metric_configs.cocoeval": "cocoeval"},
+        {"/metric@metrics.cocoeval": "cocoeval"},
     ],
 )
 class ObjectDetectionPipeline(AtriaModelPipeline):

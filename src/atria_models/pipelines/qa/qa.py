@@ -59,7 +59,7 @@ class QuestionAnsweringPipelineConfig(AtriaModelPipelineConfig):
         {
             "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/visual_question_answering"
         },
-        {"/metric@metric_configs.sequence_anls": "sequence_anls"},
+        {"/metric@metrics.sequence_anls": "sequence_anls"},
     ],
 )
 class QuestionAnsweringPipeline(AtriaModelPipeline):

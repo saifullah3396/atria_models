@@ -38,7 +38,7 @@ class AtriaModelConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model_name: str | None = None
-    config_name: str = None
+    config_name: str | None = None
     convert_bn_to_gn: bool = False
     is_frozen: bool = False
     frozen_keys_patterns: list[str] | None = None
