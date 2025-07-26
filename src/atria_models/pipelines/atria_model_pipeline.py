@@ -817,7 +817,9 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         """
         from atria_models.utilities.nn_modules import _summarize_model
 
-        return f"{self.__class__.__name__}:\n{_summarize_model(self)}"
+        return (
+            f"{self.__class__.__name__} ({self.model_name}):\n{_summarize_model(self)}"
+        )
 
     def __str__(self):
         """
