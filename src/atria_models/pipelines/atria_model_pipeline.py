@@ -37,7 +37,6 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict
 
 from atria_models.core.atria_model import AtriaModel
-from atria_models.utilities.checkpoints import CheckpointConfig
 
 if TYPE_CHECKING:
     import torch
@@ -68,7 +67,6 @@ class AtriaModelPipelineConfig(BaseModel):
 
     name: str | None = None
     model: AtriaModel | dict[str, AtriaModel]
-    checkpoint_configs: list[CheckpointConfig] | None = None
     metrics: dict[str, MetricBuilder] | None = None
     runtime_transforms: DataTransformsDict = DataTransformsDict()
 
@@ -119,9 +117,6 @@ class ModelConfigMixin:
                     }
                     if isinstance(self._config.model, dict)
                     else self._config.model.build_config,
-                    checkpoint_configs=self._config.checkpoint_configs
-                    if self._config.checkpoint_configs is not None
-                    else None,
                     metric_builders={
                         key: value.build_config
                         for key, value in self._config.metrics.items()
@@ -340,7 +335,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
 
     def build(
         self,
-        dataset_metadata: DatasetMetadata | None,
+        checkpoint_path: str | None = None,
+        dataset_metadata: DatasetMetadata | None = None,
         tb_logger: TensorboardLogger | None = None,
     ) -> None:
         """
@@ -350,9 +346,22 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
             dataset_metadata (DatasetMetadata): Metadata for the dataset.
             tb_logger (Optional[TensorboardLogger]): Tensorboard logger instance.
         """
+        assert not self._is_built, (
+            "Model is already built. Call `reset()` to rebuild the model."
+        )
+        assert not (checkpoint_path is not None and dataset_metadata is not None) or (
+            checkpoint_path is None and dataset_metadata is None
+        ), (
+            "You can either provide a checkpoint path or dataset metadata, "
+            "but not both at the same time."
+        )
+        if checkpoint_path is not None:
+            return self.build_from_checkpoint(
+                checkpoint_path=checkpoint_path, tb_logger=tb_logger
+            )
+
         import ignite.distributed as idist
 
-        from atria_models.utilities.checkpoints import CheckpointManager
         from atria_models.utilities.nn_modules import _validate_built_model
 
         self._dataset_metadata = dataset_metadata
@@ -361,13 +370,10 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         if idist.get_rank() > 0:  # Stop all ranks > 0
             idist.barrier()
 
-        self._model = _validate_built_model(self._build_model())
+        # build model config to verify it can be built
         self.prepare_build_config()
 
-        if self.config.checkpoint_configs is not None:
-            CheckpointManager.load_checkpoints(
-                model=self._model, checkpoint_configs=self.config.checkpoint_configs
-            )
+        self._model = _validate_built_model(self._build_model())
 
         if idist.get_rank() == 0:
             idist.barrier()
@@ -376,7 +382,9 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
 
         return self
 
-    def build_from_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+    def build_from_checkpoint(
+        self, checkpoint_path: str, tb_logger: TensorboardLogger | None = None
+    ) -> AtriaModelPipeline:
         """
         Builds the model from a checkpoint.
 
@@ -385,17 +393,17 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         """
         from atria_core.types import DatasetMetadata
 
+        from atria_models.utilities.checkpoints import _load_checkpoint_from_path_or_url
+
+        checkpoint = _load_checkpoint_from_path_or_url(checkpoint_path)
         dataset_metadata = checkpoint.pop("dataset_metadata", None)
         if dataset_metadata is None:
             raise ValueError(
-                "Checkpoint must contain 'dataset_metadata'. "
+                f"{self.__class__} pipeline must contain 'dataset_metadata'. "
                 "Please ensure the model was saved with the dataset metadata."
             )
         dataset_metadata = DatasetMetadata.model_validate(dataset_metadata)
-        self.build(
-            dataset_metadata=dataset_metadata,
-            tb_logger=None,  # Tensorboard logger is not used in this context
-        )
+        self.build(dataset_metadata=dataset_metadata, tb_logger=tb_logger)
         self.load_state_dict(checkpoint)
         return self
 
@@ -543,10 +551,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
                 state_dict["non_trainable_models"]
             )
         elif "model" in state_dict:
-            if "_model" in state_dict["model"]:
-                self._model._model.load_state_dict(state_dict["model"]["_model"])
-            else:
-                self._model.load_state_dict(state_dict["model"])
+            self._model.load_state_dict(state_dict["model"], strict=False)
 
     def upload_to_hub(
         self,
@@ -663,7 +668,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
     def load_from_hub(
         cls, name: str, override_config: dict | None = None
     ) -> AtriaModelPipeline:
-        from atria_registry.utilities import _instantiate_object_from_config
+        from atria_registry.utilities import instantiate_object_from_config
 
         from atria_models.utilities.checkpoints import _bytes_to_checkpoint
 
@@ -701,7 +706,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
                 "The model checkpoint does not contain a 'config' key. "
                 "Please ensure the model was saved with the configuration."
             )
-        model: AtriaModelPipeline = _instantiate_object_from_config(
+        model: AtriaModelPipeline = instantiate_object_from_config(
             config, override_config
         )
         return model.build_from_checkpoint(checkpoint)

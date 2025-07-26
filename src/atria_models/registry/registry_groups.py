@@ -81,7 +81,6 @@ class ModelRegistryGroup(RegistryGroup):
                         module=module_spec.module
                     )  # we first pass it to config then replace it!!
                     module_spec.module = LocalModel
-                    module_spec.name = f"atria/{module_spec.name}"
                     module_spec.model_extra.update(
                         {k: getattr(config, k) for k in config.__class__.model_fields}
                     )
@@ -124,7 +123,6 @@ class ModelRegistryGroup(RegistryGroup):
                     module=module_spec.module
                 )  # we first pass it to config then replace it!!
                 module_spec.module = LocalModel
-                module_spec.name = f"atria/{module_spec.name}"
                 module_spec.model_extra.update(
                     {k: getattr(config, k) for k in config.__class__.model_fields}
                 )

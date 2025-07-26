@@ -2,8 +2,8 @@ _target_: atria_models.pipelines.classification.token.TokenClassificationPipelin
 _partial_: false
 defaults:
 - /model@model: transformers/token_classification
-- /data_transform@runtime_transforms.train: document_instance_tokenizer/sequence_classification
-- /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/sequence_classification
+- /data_transform@runtime_transforms.train: document_instance_tokenizer/token_classification
+- /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/token_classification
 - /metric@metrics.seqeval_accuracy_score: seqeval_accuracy_score
 - /metric@metrics.seqeval_precision_score: seqeval_precision_score
 - /metric@metrics.seqeval_recall_score: seqeval_recall_score

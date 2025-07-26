@@ -55,10 +55,10 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         "_self_",
         {"/model@model": "transformers/token_classification"},
         {
-            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/sequence_classification"
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/layout_token_classification"
         },
         {
-            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/layout_token_classification"
         },
         {"/metric@metrics.layout_precision": "layout_precision"},
         {"/metric@metrics.layout_recall": "layout_recall"},
@@ -84,7 +84,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
     """
 
     __config_cls__ = SequenceClassificationPipelineConfig
-    __task_type__: TaskType = TaskType.layout_entity_recognition
+    __task_type__: TaskType = TaskType.layout_token_classification
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
@@ -246,7 +246,7 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
         if self._dataset_metadata is None:
             return {}
         assert self._dataset_metadata.dataset_labels.ser is not None, (
-            f"`semantic_entity_recognition` dataset labels must be provided for {self.__class__.__name__}."
+            f"`token_classification` dataset labels must be provided for {self.__class__.__name__}."
             f"Dataset labels found in metadata: {self._dataset_metadata.dataset_labels}"
         )
         labels = self._dataset_metadata.dataset_labels.ser

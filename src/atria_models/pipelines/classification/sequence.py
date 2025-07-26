@@ -106,7 +106,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
-        loss = self._loss_fn_train(logits, batch.label)
+        loss = self._loss_fn_train(logits, batch.label.value)
         return ClassificationModelOutput(loss=loss, logits=logits, label=batch.label)
 
     def evaluation_step(
@@ -134,7 +134,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
-        loss = self._loss_fn_eval(logits, batch.label)
+        loss = self._loss_fn_eval(logits, batch.label.value)
         return ClassificationModelOutput(loss=loss, logits=logits, label=batch.label)
 
     def predict_step(
@@ -176,13 +176,14 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         Returns:
             Any: The output of the model forward pass.
         """
-        batch.token_bboxes = (batch.token_bboxes * 1000.0).long()
+        if batch.token_bboxes.min() < 1.0:
+            batch.token_bboxes = (batch.token_bboxes * 1000.0).long()
         inputs = {
             "input_ids": batch.token_ids,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
             "bbox": batch.token_bboxes if self.config.use_bbox else None,
             "pixel_values": batch.image.content if self.config.use_image else None,
-            "labels": batch.label,
+            "labels": batch.label.value,
         }
         return self._model(**inputs)

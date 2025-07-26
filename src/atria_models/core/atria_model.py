@@ -235,11 +235,11 @@ class AtriaModel(ModelConfigMixin):
             torch.Module: The built PyTorch model.
         """
 
-        from atria_models.utilities.checkpoints import CheckpointManager
+        from atria_models.utilities.checkpoints import _load_checkpoint_from_path_or_url
 
         model = self._validate_model(self._build(**kwargs, **self.config.model_kwargs))
         if self.config.pretrained_checkpoint is not None:
-            checkpoint = CheckpointManager._load_checkpoint_from_path_or_url(
+            checkpoint = _load_checkpoint_from_path_or_url(
                 self.config.pretrained_checkpoint
             )
             missing_keys, unexpected_keys = model.load_state_dict(

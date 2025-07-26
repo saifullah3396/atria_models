@@ -53,10 +53,10 @@ class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
         "_self_",
         {"/model@model": "transformers/token_classification"},
         {
-            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/sequence_classification"
+            "/data_transform@runtime_transforms.train": "document_instance_tokenizer/token_classification"
         },
         {
-            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/sequence_classification"
+            "/data_transform@runtime_transforms.evaluation": "document_instance_tokenizer/token_classification"
         },
         {"/metric@metrics.seqeval_accuracy_score": "seqeval_accuracy_score"},
         {"/metric@metrics.seqeval_precision_score": "seqeval_precision_score"},
@@ -85,7 +85,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
     """
 
     __config_cls__ = TokenClassificationPipelineConfig
-    __task_type__: TaskType = TaskType.semantic_entity_recognition
+    __task_type__: TaskType = TaskType.token_classification
 
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
@@ -241,7 +241,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
         if self._dataset_metadata is None:
             return {}
         assert self._dataset_metadata.dataset_labels.ser is not None, (
-            f"`semantic_entity_recognition` dataset labels must be provided for {self.__class__.__name__}."
+            f"`token_classification` dataset labels must be provided for {self.__class__.__name__}."
             f"Dataset labels found in metadata: {self._dataset_metadata.dataset_labels}"
         )
         labels = self._dataset_metadata.dataset_labels.ser
