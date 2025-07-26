@@ -872,8 +872,8 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         metrics = {}
         for key, metric_builder in self.config.metrics.items():
             kwargs = {}
-            metric_builder.get_possible_args()
-            if "num_classes" in metric_builder.get_possible_args():
+            possible_args = metric_builder.get_possible_args()
+            if "num_classes" in possible_args:
                 assert self._dataset_metadata is not None, (
                     "Dataset metadata must be provided to determine the number of classes."
                 )
@@ -886,6 +886,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
                 kwargs["num_classes"] = len(
                     self._dataset_metadata.dataset_labels.classification
                 )
+            if "device" in possible_args:
                 kwargs["device"] = device
             metrics[key] = metric_builder(**kwargs)
         return metrics

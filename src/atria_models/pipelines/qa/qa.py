@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from atria_core.types import SequenceQAModelOutput, TaskType
-
+from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import QuestionAnsweringModel
 from atria_models.pipelines.atria_model_pipeline import (
     AtriaModelPipeline,
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 
 class QuestionAnsweringPipelineConfig(AtriaModelPipelineConfig):
-    model: QuestionAnsweringModel
+    model: QuestionAnsweringModel | LocalModel
     use_bbox: bool = True
     use_image: bool = True
     training_overflow_strategy: OverflowStrategy = OverflowStrategy.select_random
@@ -253,8 +253,8 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             batch.token_bboxes = batch.token_bboxes.long()
         inputs = {
             "input_ids": batch.token_ids,
-            "start_positions": batch.qa_pair.tokenized_answer_starts,
-            "end_positions": batch.qa_pair.tokenized_answer_ends,
+            "start_positions": batch.tokenized_answer_start,
+            "end_positions": batch.tokenized_answer_end,
             "token_type_ids": batch.token_type_ids,
             "attention_mask": batch.attention_mask,
             "bbox": batch.token_bboxes if self.config.use_bbox else None,

@@ -47,7 +47,7 @@ def layoutlmv3_for_sequence_classification(num_labels: int, **kwargs) -> nn.Modu
 
 
 @MODEL.register("layoutlmv3/question_answering")
-def layoutlmv3_for_question_answering(num_labels: int, **kwargs) -> nn.Module:
+def layoutlmv3_for_question_answering() -> nn.Module:
     """
     Create a LayoutLMv3 model for question answering.
 
@@ -62,4 +62,4 @@ def layoutlmv3_for_question_answering(num_labels: int, **kwargs) -> nn.Module:
         LayoutLMv3ForQuestionAnswering,
     )
 
-    return LayoutLMv3ForQuestionAnswering(num_labels=num_labels, **kwargs)
+    return LayoutLMv3ForQuestionAnswering()
