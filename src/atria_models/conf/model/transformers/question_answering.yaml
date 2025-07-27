@@ -1,11 +1,9 @@
 _target_: atria_models.core.transformers_model.QuestionAnsweringModel
 _partial_: false
-model_name: null
-config_name: null
+model_name: ???
 convert_bn_to_gn: false
 is_frozen: false
 frozen_keys_patterns: null
 unfrozen_keys_patterns: null
 pretrained_checkpoint: null
 model_cache_dir: null
-tf_name: ???

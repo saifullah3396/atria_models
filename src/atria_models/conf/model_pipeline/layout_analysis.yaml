@@ -6,3 +6,13 @@ defaults:
 - /data_transform@runtime_transforms.evaluation: document_instance_mmdet_transform/train
 - /metric@metrics.cocoeval: cocoeval
 - _self_
+pipeline_name: layout_analysis
+config_name: default
+requires_test_time_aug: false
+test_time_aug_config:
+  _target_: atria_models.pipelines.mmdet.object_detection.TestTimeAugmentationConfig
+  nms:
+    _target_: atria_models.pipelines.mmdet.object_detection.NMSConfig
+    type: nms
+    iou_threshold: 0.5
+  max_per_img: 100

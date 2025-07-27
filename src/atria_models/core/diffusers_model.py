@@ -40,16 +40,6 @@ logger = get_logger(__name__)
 
 @MODEL.register("diffusers")
 class DiffusersModel(AtriaModel):
-    @property
-    def model_name(self) -> str:
-        """
-        Get the name of the model.
-
-        Returns:
-            str: The name of the model.
-        """
-        return self.config.model_name
-
     def _resolve_model_class(self) -> type:
         """
         Resolve the model class from the Diffusers library.

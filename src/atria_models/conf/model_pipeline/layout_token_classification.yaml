@@ -8,3 +8,10 @@ defaults:
 - /metric@metrics.layout_recall: layout_recall
 - /metric@metrics.layout_f1: layout_f1
 - _self_
+pipeline_name: layout_token_classification
+config_name: default
+use_bbox: true
+use_image: true
+training_overflow_strategy: select_random
+evaluation_overflow_strategy: select_all
+input_stride: 0

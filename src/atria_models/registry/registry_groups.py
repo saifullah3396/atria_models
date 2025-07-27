@@ -198,20 +198,30 @@ class ModelPipelineRegistryGroup(RegistryGroup):
                     f"Expected configs to be a list of RegistryConfig, got {type(configs)} instead."
                 )
                 for config in configs:
+                    config.pipeline_name = name
                     config_module_spec = copy.deepcopy(module_spec)
                     config_defaults = config.model_extra.pop("defaults", None)
                     if config_defaults is not None:
                         config_module_spec.defaults = config_defaults
                     config_module_spec.name = (
-                        config_module_spec.name + "/" + config.name
+                        config.pipeline_name + "/" + config.config_name
                     )
                     config_module_spec.model_extra.update(
                         {**config.model_extra, **kwargs}
                     )
                     self.register_module(config_module_spec)
                 return module
-            module_spec.model_extra.update({**kwargs})
-            self.register_module(module_spec)
-            return module
+            else:
+                from hydra_zen import MISSING
+
+                config = module.__config_cls__.model_construct(
+                    pipeline_name=name, model=MISSING, runtime_transforms=MISSING
+                )
+                module_spec.model_extra.update(
+                    {k: getattr(config, k) for k in config.__class__.model_fields}
+                )
+                module_spec.model_extra.update({**kwargs})
+                self.register_module(module_spec)
+                return module
 
         return decorator

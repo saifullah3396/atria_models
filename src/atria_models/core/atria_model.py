@@ -37,8 +37,7 @@ logger = get_logger(__name__)
 class AtriaModelConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    model_name: str | None = None
-    config_name: str | None = None
+    model_name: str = "???"
     convert_bn_to_gn: bool = False
     is_frozen: bool = False
     frozen_keys_patterns: list[str] | None = None
@@ -62,8 +61,6 @@ class ModelConfigMixin:
             "that is a subclass of AtriaModelConfig."
         )
         self._config = config_cls(**kwargs)
-        if self._config.model_name is None:
-            self._config.model_name = self.__class__.__name__.lower()
         super().__init__()
 
     def __init_subclass__(cls, **kwargs):

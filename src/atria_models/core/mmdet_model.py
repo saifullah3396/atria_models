@@ -45,7 +45,6 @@ _DEFAULT_MMDET_CONFIG_PATH = Path(_get_package_base_path("atria_models")) / "con
 
 
 class MMdetModelConfig(AtriaModelConfig):
-    mmdet_name: str = "???"  # Placeholder for the model name
     model_search_paths: list[str] | None = None
 
 
@@ -101,13 +100,13 @@ class MMDetModel(AtriaModel):
 
         # Find the model configuration in the search paths
         for path in self._resolved_model_search_paths:
-            if (path / self.config.mmdet_name).exists():
-                cfg = Config.fromfile(path / self.config.mmdet_name)
+            if (path / self.config.model_name).exists():
+                cfg = Config.fromfile(path / self.config.model_name)
                 for key, value in kwargs.items():
                     if hasattr(cfg.model, key):
                         setattr(cfg.model, key, value)
                 return MODELS.build(cfg.model)
 
         raise FileNotFoundError(
-            f"Model {self.config.mmdet_name} not found in search paths {[str(x) for x in self._resolved_model_search_paths]}"
+            f"Model {self.config.model_name} not found in search paths {[str(x) for x in self._resolved_model_search_paths]}"
         )

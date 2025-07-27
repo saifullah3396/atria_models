@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 
 
 class TorchHubConfig(AtriaModelConfig):
-    hub_name: str = "???"
+    pass
 
 
 @MODEL.register("torchhub")
@@ -65,7 +65,7 @@ class TorchHubModel(AtriaModel):
         os.environ["TORCH_HOME"] = self.config.model_cache_dir
         self.config: TorchHubConfig
         model: Module = torch.hub.load(
-            "pytorch/vision:v0.10.0", self.config.hub_name, verbose=False, **kwargs
+            "pytorch/vision:v0.10.0", self.config.model_name, verbose=False, **kwargs
         )
         if num_labels is not None:
             from torch.nn import Linear

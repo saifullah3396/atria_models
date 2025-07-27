@@ -65,13 +65,14 @@ class AtriaModelPipelineConfig(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
-    name: str | None = None
-    model: AtriaModel | dict[str, AtriaModel]
+    pipeline_name: str | None = None
+    config_name: str = "default"
+    model: AtriaModel | dict[str, AtriaModel]  # noqa: F821
     metrics: dict[str, MetricBuilder] | None = None
     runtime_transforms: DataTransformsDict = DataTransformsDict()
 
 
-class ModelConfigMixin:
+class ModelPipelineConfigMixin:
     __config_cls__: type[AtriaModelPipelineConfig]
 
     def __init__(self, **kwargs):
@@ -81,7 +82,8 @@ class ModelConfigMixin:
             "that is a subclass of ModelPipelineConfig."
         )
         self._config = config_cls(**kwargs)
-        self._build_config = None
+        if self._config.pipeline_name is None:
+            self._config.pipeline_name = self.__class__.__name__.lower()
         super().__init__()
 
     def __init_subclass__(cls, **kwargs):
@@ -106,7 +108,12 @@ class ModelConfigMixin:
                 f"{self.__class__.__name__} must define a __config_cls__ attribute."
             )
 
-        self._build_config = OmegaConf.to_container(
+        init_fields = {
+            k: getattr(self._config, k)
+            for k in self._config.__class__.model_fields
+            if k not in ["model", "metrics", "runtime_transforms"]
+        }
+        build_config = OmegaConf.to_container(
             OmegaConf.create(
                 builds(
                     self.__class__,
@@ -117,7 +124,7 @@ class ModelConfigMixin:
                     }
                     if isinstance(self._config.model, dict)
                     else self._config.model.build_config,
-                    metric_builders={
+                    metrics={
                         key: value.build_config
                         for key, value in self._config.metrics.items()
                     }
@@ -126,9 +133,11 @@ class ModelConfigMixin:
                     runtime_transforms=self._config.runtime_transforms.build_config
                     if self._config.runtime_transforms is not None
                     else None,
+                    **init_fields,
                 )
             )
         )
+        return build_config
 
     @cached_property
     def config(self) -> AtriaModelPipelineConfig:
@@ -136,9 +145,7 @@ class ModelConfigMixin:
 
     @cached_property
     def build_config(self) -> dict:
-        if self._build_config is None:
-            self.prepare_build_config()
-        return self._build_config
+        return self.prepare_build_config()
 
     @cached_property
     def config_hash(self) -> str:
@@ -156,7 +163,7 @@ class ModelConfigMixin:
         ).hexdigest()[:8]
 
 
-class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
+class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
     """
     Abstract base class for task-specific PyTorch models.
 
@@ -169,12 +176,23 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
     """
 
     __config_cls__ = AtriaModelPipelineConfig
+    __default_config_name__ = "default"
+    __default_config_base_path__ = "conf/model_pipeline"
+    __default_config_path__ = __default_config_base_path__ + "/{config_name}.yaml"
     __requires_model_dict__: ClassVar[bool] = False
     __required_model_dict_keys__: ClassVar[list[str]] = []
     __task_type__: TaskType
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
+
+        # config is now available at self._config
+        if self.config.config_name == self.__default_config_name__:
+            self.config.config_name = f"{self.config.config_name}-{self.config_hash}"
+
+        self._config_path = self.__default_config_path__.format(
+            config_name=self.config.config_name
+        )
 
         self._dataset_metadata = None
         self._tb_logger = None
@@ -370,9 +388,6 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         if idist.get_rank() > 0:  # Stop all ranks > 0
             idist.barrier()
 
-        # build model config to verify it can be built
-        self.prepare_build_config()
-
         self._model = _validate_built_model(self._build_model())
 
         if idist.get_rank() == 0:
@@ -559,6 +574,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         branch: str = "main",
         description: str | None = None,
         is_public: bool = False,
+        overwrite_existing: bool = False,
     ) -> None:
         from atria_models.utilities.checkpoints import _checkpoint_to_bytes
 
@@ -566,42 +582,214 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
             "Model must be built before uploading to the hub. "
             "Call `build()` method before uploading."
         )
-        try:
-            import atria_hub  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "The 'atria_hub' package is required to load datasets from the hub. "
-                "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
-            )
 
-        from atria_hub.hub import AtriaHub
-
-        if description is None:
-            description = f"A {self.__class__.__name__} model checkpoint."
+        if name is None:
+            name = self.model_name.replace("_", "-").lower()
 
         logger.info(
             f"Uploading model {self.__class__.__name__} to hub with name {name} and config {branch}."
         )
 
-        # initialize the AtriaHub client
-        hub = AtriaHub().initialize()
+        try:
+            import atria_hub  # noqa: F401
+            from atria_hub.hub import AtriaHub
 
-        # create a new model in the hub or get the existing one
-        model = hub.models.get_or_create(
-            username=hub.auth.username,
-            name=name,
-            description=description,
-            task_type=self.task_type,
-            is_public=is_public,
-        )
+            if description is None:
+                description = f"A {self.__class__.__name__} model checkpoint."
 
-        # upload the model checkpoint to the hub at the specified branch
-        hub.models.upload_checkpoint(
-            model=model,
-            branch=branch,
-            model_checkpoint=_checkpoint_to_bytes(self.state_dict()),
-            model_config=self.config,
-        )
+            hub = AtriaHub().initialize()
+            model = hub.models.get_or_create(
+                username=hub.auth.username,
+                name=name,
+                default_branch=branch,
+                task_type=self.task_type,
+                description=description,
+                is_public=is_public,
+            )
+
+            # upload the model checkpoint to the hub at the specified branch
+            logger.info(
+                f"Uploading model to hub with name {hub.auth.username}/{name} "
+                f"on branch {branch} and config_name {self.config.config_name}."
+            )
+            hub.models.upload_files(
+                model=model,
+                branch=branch,
+                config_name=self.config.config_name,
+                configs_base_path=self.__default_config_base_path__,
+                model_checkpoint=_checkpoint_to_bytes(self.state_dict()),
+                model_config=self.build_config,
+                overwrite_existing=overwrite_existing,
+            )
+            logger.info(
+                f"Model {name} uploaded successfully to branch {branch}. "
+                f"You can load it with name '{hub.auth.username}/{name}' and config_name '{self.config.config_name}'."
+            )
+        except ImportError as e:
+            if e.path.startswith("atria_hub"):
+                raise ImportError(
+                    "The 'atria_hub' package is required to load models from the hub. "
+                    "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
+                )
+            raise e
+        except Exception as e:
+            logger.error(f"Failed to upload model to hub: {e}")
+            raise
+
+    @classmethod
+    def _validate_model_name(cls, name: str) -> tuple[str, str, str | None]:
+        """
+        Validate and parse model name format.
+
+        Args:
+            name: Dataset name in format 'username/model_name' or 'username/model_name/branch'
+
+        Returns:
+            tuple: (username, model_name, branch) where branch can be None
+
+        Raises:
+            ValueError: If model name format is invalid
+        """
+        if "/" not in name:
+            raise ValueError(
+                f"Invalid model name format: {name}. "
+                "Expected format is 'username/model_name'."
+            )
+
+        parts = name.split("/")
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        else:
+            raise ValueError(
+                f"Invalid model name format: {name}. "
+                "Expected format is 'username/model_name'."
+            )
+
+    @classmethod
+    def load_from_hub(
+        cls,
+        name: str,
+        config_name: str | None = None,
+        branch: str = "main",
+        override_config: dict | None = None,
+        save_to_disk: bool = False,
+        download_dir: str | None = None,
+        instantiate: bool = True,
+    ) -> AtriaModelPipeline | None:
+        try:
+            import yaml
+            from atria_hub.hub import AtriaHub
+            from atria_registry.utilities import instantiate_object_from_config
+            from atriax_client.models.model import Model as ModelInfo
+
+            from atria_models.utilities.checkpoints import _bytes_to_checkpoint
+
+            if download_dir is None:
+                from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
+
+                download_dir = str(_DEFAULT_ATRIA_MODELS_CACHE_DIR)
+
+            # validate the model name format
+            username, model_name = cls._validate_model_name(name)
+            config_name = config_name or cls.__default_config_name__
+
+            logger.info(f"Loading model {username}/{name} with branch {branch} ")
+
+            # initialize the AtriaHub client
+            hub = AtriaHub().initialize()
+
+            # create a new model in the hub or get the existing one
+            model_info: ModelInfo = hub.models.get_by_name(
+                username=username, name=model_name
+            )
+
+            # Get all available configurations for the model
+            available_configs = hub.models.get_available_configs(
+                model_info.repo_id,
+                branch=branch,
+                configs_base_path=cls.__default_config_base_path__,
+            )
+
+            # Filter configs that start with the given config name
+            matching_configs = [
+                cfg for cfg in available_configs if cfg.startswith(config_name)
+            ]
+
+            if not matching_configs:
+                raise ValueError(
+                    f"No configurations found for model '{username}/{model_info.name}' "
+                    f"with config name '{config_name}' on branch '{branch}'. "
+                    f"Available configurations: {available_configs}"
+                )
+
+            if len(matching_configs) > 1:
+                raise RuntimeError(
+                    f"Multiple configurations found for model '{username}/{model_info.name}' "
+                    f"with config name '{config_name}' on branch '{branch}': {matching_configs}. "
+                    f"Please specify the config name explicitly."
+                )
+
+            # Use the matched config if it differs from the original
+            matched_config = matching_configs[0]
+            if matched_config != config_name:
+                logger.info(
+                    f"Using available configuration '{matched_config}' for model "
+                    f"'{username}/{model_info.name}' on branch '{branch}'."
+                )
+                config_name = matched_config
+
+            # download the model checkpoint from the hub
+            checkpoint, config = hub.models.load_checkpoint_and_config(
+                model_repo_id=model_info.repo_id,
+                branch=branch,
+                config_name=config_name,
+                configs_base_path=cls.__default_config_base_path__,
+            )
+
+            if save_to_disk:
+                from pathlib import Path
+
+                download_dir = (
+                    Path(download_dir)
+                    / f"{username}/{model_name}/{branch}/{config_name}"
+                )
+                ckpt_path = download_dir / "model.bin"
+                config_path = (
+                    download_dir
+                    / f"{cls.__default_config_base_path__}/{config_name}.yaml"
+                )
+                download_dir.mkdir(parents=True, exist_ok=True)
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Saving model checkpoint to {ckpt_path}.")
+                with open(ckpt_path, "wb") as f:
+                    f.write(checkpoint)
+                logger.info(f"Saving model config to {config_path}.")
+                with open(config_path, "w", encoding="utf-8") as f:
+                    yaml.dump(config, f)
+
+            if instantiate:
+                checkpoint = _bytes_to_checkpoint(checkpoint)
+                config = checkpoint.pop("config", None)
+                if config is None:
+                    raise ValueError(
+                        "The model checkpoint does not contain a 'config' key. "
+                        "Please ensure the model was saved with the configuration."
+                    )
+                model: AtriaModelPipeline = instantiate_object_from_config(
+                    config, override_config
+                )
+                return model.build_from_checkpoint(checkpoint)
+
+        except ImportError as e:
+            if e.path.startswith("atria_hub"):
+                raise ImportError(
+                    "The 'atria_hub' package is required to load models from the hub. "
+                    "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
+                )
+            raise e
+        except Exception as e:
+            logger.error(f"Failed to upload model to hub: {e}")
+            raise
 
     @classmethod
     def load_from_registry(
@@ -644,72 +832,6 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
         return model_pipeline.build(
             dataset_metadata=dataset_metadata, tb_logger=tb_logger
         )
-
-    @classmethod
-    def _validate_model_name(cls, name: str) -> tuple[str, str, str | None]:
-        if "/" not in name:
-            raise ValueError(
-                f"Invalid model name format: {name}. "
-                "Expected format is 'username/model_name' or 'username/model_name/branch'."
-            )
-
-        parts = name.split("/")
-        if len(parts) == 2:
-            return parts[0], parts[1], None
-        elif len(parts) == 3:
-            return parts[0], parts[1], parts[2]
-        else:
-            raise ValueError(
-                f"Invalid model name format: {name}. "
-                "Expected format is 'username/model_name' or 'username/model_name/branch'."
-            )
-
-    @classmethod
-    def load_from_hub(
-        cls, name: str, override_config: dict | None = None
-    ) -> AtriaModelPipeline:
-        from atria_registry.utilities import instantiate_object_from_config
-
-        from atria_models.utilities.checkpoints import _bytes_to_checkpoint
-
-        try:
-            import atria_hub  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "The 'atria_hub' package is required to load models from the hub. "
-                "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
-            )
-
-        from atria_hub.hub import AtriaHub
-
-        # validate the model name format
-        username, name, branch = cls._validate_model_name(name)
-
-        logger.info(f"Loading model {username}/{name}/{branch} from hub.")
-
-        # initialize the AtriaHub client
-        hub = AtriaHub().initialize()
-
-        # create a new model in the hub or get the existing one
-        model = hub.models.get_by_name(username=username, name=name)
-
-        # upload the model checkpoint to the hub at the specified branch
-        checkpoint, config = hub.models.load_checkpoint_and_config(
-            model_repo_id=model.repo_id, branch=branch
-        )
-        checkpoint = _bytes_to_checkpoint(checkpoint)
-
-        # first we get the model config
-        config = checkpoint.pop("config", None)
-        if config is None:
-            raise ValueError(
-                "The model checkpoint does not contain a 'config' key. "
-                "Please ensure the model was saved with the configuration."
-            )
-        model: AtriaModelPipeline = instantiate_object_from_config(
-            config, override_config
-        )
-        return model.build_from_checkpoint(checkpoint)
 
     def _transform_batch(
         self,

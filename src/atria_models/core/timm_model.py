@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 
 class TimmModelConfig(AtriaModelConfig):
-    timm_name: str = "???"
+    pass
 
 
 @MODEL.register("timm")
@@ -67,7 +67,7 @@ class TimmModel(AtriaModel):
         import timm
 
         self.config: TimmModelConfig
-        build_kwargs = {"model_name": self.config.timm_name, **kwargs}
+        build_kwargs = {"model_name": self.config.model_name, **kwargs}
         if num_labels is not None:
             build_kwargs["num_classes"] = num_labels
         logger.info(

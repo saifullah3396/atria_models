@@ -10,3 +10,10 @@ defaults:
 - /metric@metrics.f1_score: f1_score
 - /metric@metrics.confusion_matrix: confusion_matrix
 - _self_
+pipeline_name: sequence_classification
+config_name: default
+use_bbox: true
+use_image: true
+training_overflow_strategy: select_first
+evaluation_overflow_strategy: select_first
+input_stride: 0

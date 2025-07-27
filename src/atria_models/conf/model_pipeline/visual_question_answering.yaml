@@ -6,3 +6,10 @@ defaults:
 - /data_transform@runtime_transforms.evaluation: document_instance_tokenizer/visual_question_answering
 - /metric@metrics.sequence_anls: sequence_anls
 - _self_
+pipeline_name: visual_question_answering
+config_name: default
+use_bbox: true
+use_image: true
+training_overflow_strategy: select_random
+evaluation_overflow_strategy: select_all
+input_stride: 0

@@ -10,3 +10,10 @@ defaults:
 - /metric@metrics.seqeval_f1_score: seqeval_f1_score
 - /metric@metrics.seqeval_classification_report: seqeval_classification_report
 - _self_
+pipeline_name: token_classification
+config_name: default
+use_bbox: true
+use_image: true
+training_overflow_strategy: select_random
+evaluation_overflow_strategy: select_all
+input_stride: 0

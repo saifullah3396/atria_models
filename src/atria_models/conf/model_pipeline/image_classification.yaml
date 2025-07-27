@@ -10,3 +10,6 @@ defaults:
 - /metric@metrics.f1_score: f1_score
 - /metric@metrics.confusion_matrix: confusion_matrix
 - _self_
+pipeline_name: image_classification
+config_name: default
+mixup_config: null
