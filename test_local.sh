@@ -33,7 +33,7 @@ train() {
 
         if [[ "$dataset_with_numbers" == "$dataset_name" ]]; then
             set -x
-            PYTHONPATH=$PYTHONPATH python -m atria.task_pipelines.trainer \
+            PYTHONPATH=$PYTHONPATH python -m atria.task_pipelines.run \
                 --config-name task_pipeline/trainer/sequence_classification \
                 hydra.searchpath=[pkg://docsets/conf] \
                 dataset@data_pipeline.dataset=$dataset_path \

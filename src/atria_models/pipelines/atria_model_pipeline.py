@@ -510,7 +510,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
                 f"Model must be a torch nn.Module or a dictionary of torch nn.Modules. Got {type(self._model)}"
             )
 
-    def state_dict(self):
+    def state_dict(self) -> dict:
         """
         Retrieves the state dictionary of the model.
 
@@ -530,7 +530,7 @@ class AtriaModelPipeline(ABC, ModelConfigMixin, RepresentationMixin):
             )
         else:
             state_dict["model"] = self.model.state_dict()
-        state_dict["config"] = self.build_config
+        state_dict["atria_config"] = self.build_config
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
