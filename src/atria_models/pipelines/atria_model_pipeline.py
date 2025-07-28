@@ -26,6 +26,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from functools import cached_property, wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from atria_core.logger import get_logger
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
         ModelOutput,
         TaskType,
     )
+    from atria_hub.hub import AtriaHub
     from ignite.contrib.handlers import TensorboardLogger
     from ignite.engine import Engine
     from ignite.handlers import ProgressBar
@@ -353,8 +355,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
 
     def build(
         self,
-        checkpoint_path: str | None = None,
-        dataset_metadata: DatasetMetadata | None = None,
+        dataset_metadata: DatasetMetadata,
         tb_logger: TensorboardLogger | None = None,
     ) -> None:
         """
@@ -367,16 +368,6 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
         assert not self._is_built, (
             "Model is already built. Call `reset()` to rebuild the model."
         )
-        assert not (checkpoint_path is not None and dataset_metadata is not None) or (
-            checkpoint_path is None and dataset_metadata is None
-        ), (
-            "You can either provide a checkpoint path or dataset metadata, "
-            "but not both at the same time."
-        )
-        if checkpoint_path is not None:
-            return self.build_from_checkpoint(
-                checkpoint_path=checkpoint_path, tb_logger=tb_logger
-            )
 
         import ignite.distributed as idist
 
@@ -398,7 +389,10 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
         return self
 
     def build_from_checkpoint(
-        self, checkpoint_path: str, tb_logger: TensorboardLogger | None = None
+        self,
+        checkpoint: dict[str, Any],
+        checkpoint_path: str | None = None,
+        tb_logger: TensorboardLogger | None = None,
     ) -> AtriaModelPipeline:
         """
         Builds the model from a checkpoint.
@@ -410,7 +404,17 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
 
         from atria_models.utilities.checkpoints import _load_checkpoint_from_path_or_url
 
-        checkpoint = _load_checkpoint_from_path_or_url(checkpoint_path)
+        if checkpoint is None and checkpoint_path is None:
+            raise ValueError(
+                "Either checkpoint or checkpoint_path must be provided to build the model."
+            )
+        if checkpoint is None:
+            if checkpoint_path is None:
+                raise ValueError(
+                    "checkpoint_path must be provided if checkpoint is None."
+                )
+            logger.info(f"Loading model from checkpoint at {checkpoint_path}.")
+            checkpoint = _load_checkpoint_from_path_or_url(checkpoint_path)
         dataset_metadata = checkpoint.pop("dataset_metadata", None)
         if dataset_metadata is None:
             raise ValueError(
@@ -666,23 +670,19 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
             )
 
     @classmethod
-    def load_from_hub(
+    def download_from_hub(
         cls,
         name: str,
         config_name: str | None = None,
         branch: str = "main",
-        override_config: dict | None = None,
-        save_to_disk: bool = False,
         download_dir: str | None = None,
-        instantiate: bool = True,
     ) -> AtriaModelPipeline | None:
         try:
+            from pathlib import Path
+
             import yaml
             from atria_hub.hub import AtriaHub
-            from atria_registry.utilities import instantiate_object_from_config
             from atriax_client.models.model import Model as ModelInfo
-
-            from atria_models.utilities.checkpoints import _bytes_to_checkpoint
 
             if download_dir is None:
                 from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
@@ -693,7 +693,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
             username, model_name = cls._validate_model_name(name)
             config_name = config_name or cls.__default_config_name__
 
-            logger.info(f"Loading model {username}/{name} with branch {branch} ")
+            logger.info(f"Loading model {username}/{model_name} with branch {branch} ")
 
             # initialize the AtriaHub client
             hub = AtriaHub().initialize()
@@ -746,40 +746,146 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 configs_base_path=cls.__default_config_base_path__,
             )
 
-            if save_to_disk:
-                from pathlib import Path
-
-                download_dir = (
-                    Path(download_dir)
-                    / f"{username}/{model_name}/{branch}/{config_name}"
+            download_dir = (
+                Path(download_dir) / f"{username}/{model_name}/{branch}/{config_name}"
+            )
+            ckpt_path = download_dir / "model.bin"
+            config_path = (
+                download_dir / f"{cls.__default_config_base_path__}/{config_name}.yaml"
+            )
+            download_dir.mkdir(parents=True, exist_ok=True)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Saving model checkpoint to {ckpt_path}.")
+            with open(ckpt_path, "wb") as f:
+                f.write(checkpoint)
+            logger.info(f"Saving model config to {config_path}.")
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config, f, sort_keys=False)
+        except ImportError as e:
+            if e.path.startswith("atria_hub"):
+                raise ImportError(
+                    "The 'atria_hub' package is required to load models from the hub. "
+                    "Please install it using 'uv add https://github.com/saifullah3396/atria_hub'."
                 )
-                ckpt_path = download_dir / "model.bin"
+            raise e
+        except Exception as e:
+            logger.error(f"Failed to upload model to hub: {e}")
+            raise
+
+    @classmethod
+    def load_from_hub(
+        cls,
+        name: str,
+        config_name: str | None = None,
+        branch: str = "main",
+        override_config: dict | None = None,
+        hub: AtriaHub | None = None,
+        cache_dir: str | None = None,
+        use_cache: bool = True,
+    ) -> AtriaModelPipeline | None:
+        try:
+            import yaml
+            from atria_hub.hub import AtriaHub
+            from atria_registry.utilities import instantiate_object_from_config
+            from atriax_client.models.model import Model as ModelInfo
+
+            from atria_models.utilities.checkpoints import _bytes_to_checkpoint
+
+            # validate the model name format
+            username, model_name = cls._validate_model_name(name)
+            config_name = config_name or cls.__default_config_name__
+
+            logger.info(f"Loading model {username}/{name} with branch {branch} ")
+
+            # initialize the AtriaHub client
+            if hub is None:
+                hub = AtriaHub().initialize()
+
+            # create a new model in the hub or get the existing one
+            model_info: ModelInfo = hub.models.get_by_name(
+                username=username, name=model_name
+            )
+
+            # Get all available configurations for the model
+            available_configs = hub.models.get_available_configs(
+                model_info.repo_id,
+                branch=branch,
+                configs_base_path=cls.__default_config_base_path__,
+            )
+
+            # Filter configs that start with the given config name
+            matching_configs = [
+                cfg for cfg in available_configs if cfg.startswith(config_name)
+            ]
+
+            if not matching_configs:
+                raise ValueError(
+                    f"No configurations found for model '{username}/{model_info.name}' "
+                    f"with config name '{config_name}' on branch '{branch}'. "
+                    f"Available configurations: {available_configs}"
+                )
+
+            if len(matching_configs) > 1:
+                raise RuntimeError(
+                    f"Multiple configurations found for model '{username}/{model_info.name}' "
+                    f"with config name '{config_name}' on branch '{branch}': {matching_configs}. "
+                    f"Please specify the config name explicitly."
+                )
+
+            # Use the matched config if it differs from the original
+            matched_config = matching_configs[0]
+            if matched_config != config_name:
+                logger.info(
+                    f"Using available configuration '{matched_config}' for model "
+                    f"'{username}/{model_info.name}' on branch '{branch}'."
+                )
+                config_name = matched_config
+
+            cache_path = None
+            if use_cache and cache_dir is None:
+                from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
+
+                cache_dir = str(_DEFAULT_ATRIA_MODELS_CACHE_DIR)
+                cache_path = (
+                    Path(cache_dir) / f"{username}/{model_name}/{branch}/{config_name}"  # noqa: F821
+                )
+                ckpt_path = cache_path / "model.bin"
                 config_path = (
-                    download_dir
+                    cache_path
                     / f"{cls.__default_config_base_path__}/{config_name}.yaml"
                 )
-                download_dir.mkdir(parents=True, exist_ok=True)
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                logger.info(f"Saving model checkpoint to {ckpt_path}.")
-                with open(ckpt_path, "wb") as f:
-                    f.write(checkpoint)
-                logger.info(f"Saving model config to {config_path}.")
-                with open(config_path, "w", encoding="utf-8") as f:
-                    yaml.dump(config, f)
-
-            if instantiate:
-                checkpoint = _bytes_to_checkpoint(checkpoint)
-                config = checkpoint.pop("config", None)
-                if config is None:
-                    raise ValueError(
-                        "The model checkpoint does not contain a 'config' key. "
-                        "Please ensure the model was saved with the configuration."
-                    )
-                model: AtriaModelPipeline = instantiate_object_from_config(
-                    config, override_config
+                logger.info(
+                    f"Using cache directory {cache_path}. "
+                    "If you want to force re-download, set `use_cache=False`."
                 )
-                return model.build_from_checkpoint(checkpoint)
 
+            if cache_path is not None and ckpt_path.exists() and config_path.exists():
+                logger.info(f"Loading model checkpoint from cache at {ckpt_path}")
+                with open(ckpt_path, "rb") as f:
+                    checkpoint = f.read()
+                with open(config_path, "r", encoding="utf-8") as f:
+                    atria_config = yaml.safe_load(f)
+            else:
+                checkpoint, atria_config = hub.models.load_checkpoint_and_config(
+                    model_repo_id=model_info.repo_id,
+                    branch=branch,
+                    config_name=config_name,
+                    configs_base_path=cls.__default_config_base_path__,
+                )
+
+                if use_cache:
+                    cache_path.mkdir(parents=True, exist_ok=True)
+                    config_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(ckpt_path, "wb") as f:
+                        f.write(checkpoint)
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        yaml.dump(atria_config, f, sort_keys=False)
+            model_pipeline: AtriaModelPipeline = instantiate_object_from_config(
+                atria_config, override_config
+            )
+            checkpoint = _bytes_to_checkpoint(checkpoint)
+            model_pipeline = model_pipeline.build_from_checkpoint(checkpoint=checkpoint)
+            return model_pipeline, model_info
         except ImportError as e:
             if e.path.startswith("atria_hub"):
                 raise ImportError(
