@@ -26,7 +26,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from functools import cached_property, wraps
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from atria_core.logger import get_logger
@@ -784,7 +783,6 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
         use_cache: bool = True,
     ) -> AtriaModelPipeline | None:
         try:
-            import yaml
             from atria_hub.hub import AtriaHub
             from atria_registry.utilities import instantiate_object_from_config
             from atriax_client.models.model import Model as ModelInfo
@@ -802,9 +800,11 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 hub = AtriaHub().initialize()
 
             # create a new model in the hub or get the existing one
+            logger.info("getting model info from hub")
             model_info: ModelInfo = hub.models.get_by_name(
                 username=username, name=model_name
             )
+            logger.info(f"model_info: {model_info}")
 
             # Get all available configurations for the model
             available_configs = hub.models.get_available_configs(
@@ -812,6 +812,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 branch=branch,
                 configs_base_path=cls.__default_config_base_path__,
             )
+            logger.info(f"available_configs: {available_configs}")
 
             # Filter configs that start with the given config name
             matching_configs = [
@@ -841,50 +842,23 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 )
                 config_name = matched_config
 
-            cache_path = None
-            if use_cache and cache_dir is None:
-                from atria_core.constants import _DEFAULT_ATRIA_MODELS_CACHE_DIR
-
-                cache_dir = str(_DEFAULT_ATRIA_MODELS_CACHE_DIR)
-                cache_path = (
-                    Path(cache_dir) / f"{username}/{model_name}/{branch}/{config_name}"  # noqa: F821
-                )
-                ckpt_path = cache_path / "model.bin"
-                config_path = (
-                    cache_path
-                    / f"{cls.__default_config_base_path__}/{config_name}.yaml"
-                )
-                logger.info(
-                    f"Using cache directory {cache_path}. "
-                    "If you want to force re-download, set `use_cache=False`."
-                )
-
-            if cache_path is not None and ckpt_path.exists() and config_path.exists():
-                logger.info(f"Loading model checkpoint from cache at {ckpt_path}")
-                with open(ckpt_path, "rb") as f:
-                    checkpoint = f.read()
-                with open(config_path, "r", encoding="utf-8") as f:
-                    atria_config = yaml.safe_load(f)
-            else:
-                checkpoint, atria_config = hub.models.load_checkpoint_and_config(
-                    model_repo_id=model_info.repo_id,
-                    branch=branch,
-                    config_name=config_name,
-                    configs_base_path=cls.__default_config_base_path__,
-                )
-
-                if use_cache:
-                    cache_path.mkdir(parents=True, exist_ok=True)
-                    config_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(ckpt_path, "wb") as f:
-                        f.write(checkpoint)
-                    with open(config_path, "w", encoding="utf-8") as f:
-                        yaml.dump(atria_config, f, sort_keys=False)
+            checkpoint, atria_config = hub.models.load_checkpoint_and_config(
+                model_repo_id=model_info.repo_id,
+                branch=branch,
+                config_name=config_name,
+                configs_base_path=cls.__default_config_base_path__,
+            )
+            logger.info("here1")
             model_pipeline: AtriaModelPipeline = instantiate_object_from_config(
                 atria_config, override_config
             )
+            logger.info("here2")
             checkpoint = _bytes_to_checkpoint(checkpoint)
+
+            logger.info("here3")
             model_pipeline = model_pipeline.build_from_checkpoint(checkpoint=checkpoint)
+
+            logger.info("here4")
             return model_pipeline, model_info
         except ImportError as e:
             if e.path.startswith("atria_hub"):
@@ -981,6 +955,13 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
         Returns:
             AtriaModelOutput: The output of the model.
         """
+
+    @abstractmethod
+    def can_be_evaluated(self, batch: BaseDataInstance) -> bool:
+        raise NotImplementedError(
+            "This method must be implemented in the subclass to determine if the batch has appropriate ground truth "
+            "labels available for evaluation step."
+        )
 
     @abstractmethod
     def evaluation_step(
