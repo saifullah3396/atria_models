@@ -11,10 +11,10 @@ requires-python = "==3.11.*"
 license = { file = "LICENSE.txt" }
 authors = [{ name = "Saifullah", email = "saifullah.saifullah@dfki.de" }]
 dependencies = [
-    "atria-core[torch-gpu]",
-    "atria-hub[torch-gpu]",
+    "atria-core",
+    "atria-hub",
     "atria-metrics",
-    "atria-registry[torch-gpu]",
+    "atria-registry",
     "atria-transforms",
     "diffusers>=0.34.0",
     "mmcv==2.1.0",
@@ -108,12 +108,6 @@ xfail_strict = true         # Treat tests that are marked as xfail but pass as t
 
 [tool.uv]
 managed = true
-conflicts = [
-    [
-        { extra = "torch-cpu" },
-        { extra = "torch-gpu" },
-    ],
-]
 
 [tool.uv.sources]
 mmcv = { url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2.1.0-cp311-cp311-manylinux1_x86_64.whl" }
