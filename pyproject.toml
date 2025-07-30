@@ -109,20 +109,20 @@ xfail_strict = true         # Treat tests that are marked as xfail but pass as t
 [tool.uv]
 managed = true
 conflicts = [
-  [
-    { extra = "torch-cpu" },
-    { extra = "torch-gpu" },
-  ],
+    [
+        { extra = "torch-cpu" },
+        { extra = "torch-gpu" },
+    ],
 ]
 
 [tool.uv.sources]
 mmcv = { url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2.1.0-cp311-cp311-manylinux1_x86_64.whl" }
 datadings = { git = "https://github.com/saifullah3396/datadings.git" }
-atria-registry = { path = "../atria_registry", editable = true }
-atria-core = { path = "../atria_core", editable = true }
-atria-hub = { path = "../atria_hub", editable = true }
-atria-transforms = { path = "../atria_transforms", editable = true }
-atria-metrics = { path = "../atria_metrics", editable = true }
+atria-registry = { path = "https://github.com/saifullah3396/atria_registry" }
+atria-core = { path = "https://github.com/saifullah3396/atria_core" }
+atria-hub = { path = "https://github.com/saifullah3396/atria_hub" }
+atria-transforms = { path = "https://github.com/saifullah3396/atria_transforms" }
+atria-metrics = { path = "https://github.com/saifullah3396/atria_metrics" }
 
 [dependency-groups]
 dev = [
