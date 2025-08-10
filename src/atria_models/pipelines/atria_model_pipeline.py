@@ -414,6 +414,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 )
             logger.info(f"Loading model from checkpoint at {checkpoint_path}.")
             checkpoint = _load_checkpoint_from_path_or_url(checkpoint_path)
+        logger.info("checkpoint %s", checkpoint.keys())
         dataset_metadata = checkpoint.pop("dataset_metadata", None)
         if dataset_metadata is None:
             raise ValueError(

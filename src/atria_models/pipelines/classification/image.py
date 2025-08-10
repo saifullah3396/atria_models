@@ -25,6 +25,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from atria_core.types import DocumentInstance, ImageInstance, TaskType
+from pydantic import BaseModel
+
 from atria_models.core.atria_model import AtriaModel
 from atria_models.core.local_model import LocalModel
 from atria_models.core.timm_model import TimmModel
@@ -33,7 +35,6 @@ from atria_models.core.transformers_model import ImageClassificationModel
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
 from atria_models.pipelines.classification.base import ClassificationPipeline
 from atria_models.registry import MODEL_PIPELINE
-from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any
@@ -121,21 +122,11 @@ class ImageClassificationPipeline(ClassificationPipeline):
             ClassificationModelOutput: The output containing loss, logits, and labels.
         """
 
-        from atria_core.types import ClassificationModelOutput
-        from atria_models.utilities.nn_modules import _get_logits_from_output
-
         if self._mixup is not None:
             batch.image.content, batch.gt.classification.label.value = self._mixup(
                 batch.image.content, batch.gt.classification.label.value
             )
-        logits = _get_logits_from_output(self._model_forward(batch))
-        loss = self._loss_fn_train(logits, batch.gt.classification.label.value)
-        return ClassificationModelOutput(
-            loss=loss,
-            logits=logits,
-            gt_label=batch.gt.classification.label.value,
-            gt_label_name=batch.gt.classification.label.name,
-        )
+        return super().training_step(batch, **kwargs)
 
     def _build_model(self) -> AtriaModel:
         """

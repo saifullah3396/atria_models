@@ -87,6 +87,9 @@ class TokenClassificationPipeline(ClassificationPipeline):
     __config_cls__ = TokenClassificationPipelineConfig
     __task_type__: TaskType = TaskType.token_classification
 
+    def can_be_evaluated(self, batch: TokenizedDocumentInstance) -> bool:
+        return batch.token_labels is not None
+
     def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
         """
         Fix the input stride for the batch.

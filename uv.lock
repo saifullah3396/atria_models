@@ -3,13 +3,9 @@ revision = 2
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'darwin'",
-    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
     "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
-conflicts = [[
-    { package = "atria-models", extra = "torch-cpu" },
-    { package = "atria-models", extra = "torch-gpu" },
-]]
 
 [[package]]
 name = "addict"
@@ -87,7 +83,7 @@ wheels = [
 [[package]]
 name = "atria-core"
 version = "0.0.0"
-source = { editable = "../atria_core" }
+source = { git = "https://github.com/saifullah3396/atria_core.git#bfbc781fc4d43a9267d044f332ac169d2406e54d" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "codename" },
@@ -108,43 +104,10 @@ dependencies = [
     { name = "rich" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4", specifier = "==4.12.2" },
-    { name = "codename", specifier = ">=1.1" },
-    { name = "coloredlogs", specifier = "==15.0.1" },
-    { name = "coverage" },
-    { name = "coverage", marker = "extra == 'test'" },
-    { name = "factory-boy" },
-    { name = "faker" },
-    { name = "imagesize", specifier = ">=1.4.1" },
-    { name = "lazy-imports", specifier = ">=1.0.0" },
-    { name = "lazy-loader", specifier = "==0.4" },
-    { name = "lxml", specifier = ">=6.0.0" },
-    { name = "numpy", specifier = "==1.26.4" },
-    { name = "omegaconf", specifier = "==2.3.0" },
-    { name = "pillow", specifier = "==10.0.0" },
-    { name = "pyarrow", specifier = ">=20.0.0" },
-    { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pytest" },
-    { name = "rich", specifier = "==14.0.0" },
-    { name = "torch", marker = "extra == 'with-torch'", specifier = "==2.1.2" },
-    { name = "torchvision", marker = "extra == 'with-torch'", specifier = "==0.16.2" },
-]
-provides-extras = ["test", "with-torch"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "factory-boy", specifier = ">=3.3.3" },
-    { name = "ipykernel", specifier = ">=6.29.5" },
-    { name = "pyarrow", specifier = ">=20.0.0" },
-    { name = "ruff", specifier = ">=0.12.2" },
-]
-
 [[package]]
 name = "atria-hub"
 version = "0.0.0"
-source = { editable = "../atria_hub" }
+source = { git = "https://github.com/saifullah3396/atria_hub.git#81f09bda58fe42af17f03d6c9d256056d39df2ce" }
 dependencies = [
     { name = "atriax-client" },
     { name = "gotrue" },
@@ -158,69 +121,16 @@ dependencies = [
     { name = "tqdm" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "atriax-client", editable = "../atriax_client" },
-    { name = "coverage", marker = "extra == 'test'" },
-    { name = "gotrue", specifier = ">=2.12.3" },
-    { name = "keyring", specifier = ">=25.6.0" },
-    { name = "lakefs", specifier = ">=0.11.1" },
-    { name = "lakefs-spec", specifier = ">=0.11.4" },
-    { name = "openapi-python-client", specifier = ">=0.25.2" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.11.7" },
-    { name = "pydantic-settings", specifier = ">=2.10.1" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "supabase", specifier = ">=2.16.0" },
-    { name = "tqdm", specifier = ">=4.67.1" },
-]
-provides-extras = ["test"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", specifier = ">=7.9.2" },
-    { name = "factory-boy", specifier = ">=3.3.3" },
-    { name = "ipykernel", specifier = ">=6.28.1" },
-    { name = "mypy", specifier = ">=1.16.1" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "ruff", specifier = ">=0.12.2" },
-]
-
 [[package]]
 name = "atria-metrics"
 version = "0.0.0"
-source = { editable = "../atria_metrics" }
+source = { git = "https://github.com/saifullah3396/atria_metrics.git#845719eba66209f66e01ebf85a6d500a1d420ab2" }
 dependencies = [
     { name = "anls" },
     { name = "atria-core" },
     { name = "atria-registry" },
     { name = "pytorch-ignite" },
     { name = "seqeval" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anls", specifier = ">=0.0.2" },
-    { name = "atria-core", editable = "../atria_core" },
-    { name = "atria-registry", editable = "../atria_registry" },
-    { name = "pytorch-ignite", specifier = ">=0.5.2" },
-    { name = "seqeval" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", specifier = ">=7.9.2" },
-    { name = "ipykernel", specifier = ">=6.28.1" },
-    { name = "mypy", specifier = ">=1.16.1" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "ruff", specifier = ">=0.12.2" },
-]
-torch-cpu = [
-    { name = "torch", specifier = "==2.1.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "atria-metrics", group = "torch-cpu" } },
-    { name = "torchvision", specifier = "==0.16.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "atria-metrics", group = "torch-cpu" } },
-]
-torch-gpu = [
-    { name = "torch", specifier = "==2.1.2", index = "https://download.pytorch.org/whl/cu121", conflict = { package = "atria-metrics", group = "torch-gpu" } },
-    { name = "torchvision", specifier = "==0.16.2", index = "https://download.pytorch.org/whl/cu121", conflict = { package = "atria-metrics", group = "torch-gpu" } },
 ]
 
 [[package]]
@@ -255,11 +165,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "atria-core", extras = ["torch-gpu"], editable = "../atria_core" },
-    { name = "atria-hub", extras = ["torch-gpu"], editable = "../atria_hub" },
-    { name = "atria-metrics", editable = "../atria_metrics" },
-    { name = "atria-registry", extras = ["torch-gpu"], editable = "../atria_registry" },
-    { name = "atria-transforms", editable = "../atria_transforms" },
+    { name = "atria-core", git = "https://github.com/saifullah3396/atria_core.git" },
+    { name = "atria-hub", git = "https://github.com/saifullah3396/atria_hub.git" },
+    { name = "atria-metrics", git = "https://github.com/saifullah3396/atria_metrics.git" },
+    { name = "atria-registry", git = "https://github.com/saifullah3396/atria_registry.git" },
+    { name = "atria-transforms", git = "https://github.com/saifullah3396/atria_transforms.git" },
     { name = "diffusers", specifier = ">=0.34.0" },
     { name = "mmcv", url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2.1.0-cp311-cp311-manylinux1_x86_64.whl" },
     { name = "mmdet", specifier = "==3.3.0" },
@@ -283,27 +193,17 @@ dev = [
 [[package]]
 name = "atria-registry"
 version = "0.0.0"
-source = { editable = "../atria_registry" }
+source = { git = "https://github.com/saifullah3396/atria_registry.git#b91503ca57522298c940b06b583e11ada620f4b6" }
 dependencies = [
     { name = "atria-core" },
     { name = "hydra-core" },
     { name = "hydra-zen" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "atria-core", editable = "../atria_core" },
-    { name = "coverage", marker = "extra == 'test'" },
-    { name = "hydra-core", specifier = "==1.3.2" },
-    { name = "hydra-zen", specifier = "==0.14.0" },
-    { name = "pytest", marker = "extra == 'test'" },
-]
-provides-extras = ["test"]
-
 [[package]]
 name = "atria-transforms"
 version = "0.0.0"
-source = { editable = "../atria_transforms" }
+source = { git = "https://github.com/saifullah3396/atria_transforms.git#5d8f9f809bfee64fd7d9d23c090896ed3ada15d0" }
 dependencies = [
     { name = "atria-core" },
     { name = "atria-registry" },
@@ -315,50 +215,14 @@ dependencies = [
     { name = "typeguard" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "atria-core", editable = "../atria_core" },
-    { name = "atria-registry", editable = "../atria_registry" },
-    { name = "coverage", marker = "extra == 'test'" },
-    { name = "mmcv", url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2.1.0-cp311-cp311-manylinux1_x86_64.whl" },
-    { name = "mmdet", specifier = "==3.3.0" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "torch", specifier = "==2.1.2" },
-    { name = "torch", marker = "extra == 'torch-cpu'", specifier = "==2.1.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "atria-transforms", extra = "torch-cpu" } },
-    { name = "torch", marker = "extra == 'torch-gpu'", specifier = "==2.1.2", index = "https://download.pytorch.org/whl/cu121", conflict = { package = "atria-transforms", extra = "torch-gpu" } },
-    { name = "torchvision", specifier = "==0.16.2" },
-    { name = "torchvision", marker = "extra == 'torch-cpu'", specifier = "==0.16.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "atria-transforms", extra = "torch-cpu" } },
-    { name = "torchvision", marker = "extra == 'torch-gpu'", specifier = "==0.16.2", index = "https://download.pytorch.org/whl/cu121", conflict = { package = "atria-transforms", extra = "torch-gpu" } },
-    { name = "transformers", specifier = ">=4.37.0" },
-    { name = "typeguard", specifier = ">=4.4.4" },
-]
-provides-extras = ["torch-cpu", "torch-gpu", "test"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", specifier = ">=7.9.2" },
-    { name = "factory-boy", specifier = ">=3.3.3" },
-    { name = "ipykernel", specifier = ">=6.28.1" },
-    { name = "mypy", specifier = ">=1.16.1" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "ruff", specifier = ">=0.12.2" },
-]
-
 [[package]]
 name = "atriax-client"
 version = "0.1.0"
-source = { editable = "../atriax_client" }
+source = { git = "https://github.com/saifullah3396/atriax_client.git#db2986f8ecda253c6aeb8bf10a54a324f3172c39" }
 dependencies = [
     { name = "attrs" },
     { name = "httpx" },
     { name = "python-dateutil" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "attrs", specifier = ">=22.2.0" },
-    { name = "httpx", specifier = ">=0.23.0,<0.29.0" },
-    { name = "python-dateutil", specifier = ">=2.8.0,<3.0.0" },
 ]
 
 [[package]]
@@ -450,7 +314,7 @@ name = "click"
 version = "8.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/60/6c/8ca2efa64cf75a977a0d7fac081354553ebe483345c734fb6b6515d96bbc/click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202", size = 286342, upload_time = "2025-05-20T23:19:49.832Z" }
 wheels = [
@@ -546,11 +410,10 @@ name = "cryptography"
 version = "45.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'darwin') or (platform_python_implementation == 'PyPy' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/1e/49527ac611af559665f71cbb8f92b332b5ec9c6fbc4e88b0f8e92f5e85df/cryptography-45.0.5.tar.gz", hash = "sha256:72e76caa004ab63accdf26023fccd1d087f6d90ec6048ff33ad0445abf7f605a", size = 744903, upload_time = "2025-07-02T13:06:25.941Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/fb/09e28bc0c46d2c547085e60897fea96310574c70fb21cd58a730a45f3403/cryptography-45.0.5-cp311-abi3-macosx_10_9_universal2.whl", hash = "sha256:101ee65078f6dd3e5a028d4f19c07ffa4dd22cce6a20eaa160f8b5219911e7d8", size = 7043092, upload_time = "2025-07-02T13:05:01.514Z" },
     { url = "https://files.pythonhosted.org/packages/b1/05/2194432935e29b91fb649f6149c1a4f9e6d3d9fc880919f4ad1bcc22641e/cryptography-45.0.5-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3a264aae5f7fbb089dbc01e0242d3b67dffe3e6292e1f5182122bdf58e65215d", size = 4205926, upload_time = "2025-07-02T13:05:04.741Z" },
     { url = "https://files.pythonhosted.org/packages/07/8b/9ef5da82350175e32de245646b1884fc01124f53eb31164c77f95a08d682/cryptography-45.0.5-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e74d30ec9c7cb2f404af331d5b4099a9b322a8a6b25c4632755c8757345baac5", size = 4429235, upload_time = "2025-07-02T13:05:07.084Z" },
     { url = "https://files.pythonhosted.org/packages/7c/e1/c809f398adde1994ee53438912192d92a1d0fc0f2d7582659d9ef4c28b0c/cryptography-45.0.5-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:3af26738f2db354aafe492fb3869e955b12b2ef2e16908c8b9cb928128d42c57", size = 4209785, upload_time = "2025-07-02T13:05:09.321Z" },
@@ -560,9 +423,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c9/d8/0749f7d39f53f8258e5c18a93131919ac465ee1f9dccaf1b3f420235e0b5/cryptography-45.0.5-cp311-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:ad0caded895a00261a5b4aa9af828baede54638754b51955a0ac75576b831b27", size = 4456087, upload_time = "2025-07-02T13:05:16.945Z" },
     { url = "https://files.pythonhosted.org/packages/09/d7/92acac187387bf08902b0bf0699816f08553927bdd6ba3654da0010289b4/cryptography-45.0.5-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:9024beb59aca9d31d36fcdc1604dd9bbeed0a55bface9f1908df19178e2f116e", size = 4332873, upload_time = "2025-07-02T13:05:18.743Z" },
     { url = "https://files.pythonhosted.org/packages/03/c2/840e0710da5106a7c3d4153c7215b2736151bba60bf4491bdb421df5056d/cryptography-45.0.5-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:91098f02ca81579c85f66df8a588c78f331ca19089763d733e34ad359f474174", size = 4564651, upload_time = "2025-07-02T13:05:21.382Z" },
-    { url = "https://files.pythonhosted.org/packages/2e/92/cc723dd6d71e9747a887b94eb3827825c6c24b9e6ce2bb33b847d31d5eaa/cryptography-45.0.5-cp311-abi3-win32.whl", hash = "sha256:926c3ea71a6043921050eaa639137e13dbe7b4ab25800932a8498364fc1abec9", size = 2929050, upload_time = "2025-07-02T13:05:23.39Z" },
-    { url = "https://files.pythonhosted.org/packages/1f/10/197da38a5911a48dd5389c043de4aec4b3c94cb836299b01253940788d78/cryptography-45.0.5-cp311-abi3-win_amd64.whl", hash = "sha256:b85980d1e345fe769cfc57c57db2b59cff5464ee0c045d52c0df087e926fbe63", size = 3403224, upload_time = "2025-07-02T13:05:25.202Z" },
-    { url = "https://files.pythonhosted.org/packages/fe/2b/160ce8c2765e7a481ce57d55eba1546148583e7b6f85514472b1d151711d/cryptography-45.0.5-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:f3562c2f23c612f2e4a6964a61d942f891d29ee320edb62ff48ffb99f3de9ae8", size = 7017143, upload_time = "2025-07-02T13:05:27.229Z" },
     { url = "https://files.pythonhosted.org/packages/c2/e7/2187be2f871c0221a81f55ee3105d3cf3e273c0a0853651d7011eada0d7e/cryptography-45.0.5-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3fcfbefc4a7f332dece7272a88e410f611e79458fab97b5efe14e54fe476f4fd", size = 4197780, upload_time = "2025-07-02T13:05:29.299Z" },
     { url = "https://files.pythonhosted.org/packages/b9/cf/84210c447c06104e6be9122661159ad4ce7a8190011669afceeaea150524/cryptography-45.0.5-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:460f8c39ba66af7db0545a8c6f2eabcbc5a5528fc1cf6c3fa9a1e44cec33385e", size = 4420091, upload_time = "2025-07-02T13:05:31.221Z" },
     { url = "https://files.pythonhosted.org/packages/3e/6a/cb8b5c8bb82fafffa23aeff8d3a39822593cee6e2f16c5ca5c2ecca344f7/cryptography-45.0.5-cp37-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:9b4cf6318915dccfe218e69bbec417fdd7c7185aa7aab139a2c0beb7468c89f0", size = 4198711, upload_time = "2025-07-02T13:05:33.062Z" },
@@ -572,14 +432,10 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/05/2b/aaf0adb845d5dabb43480f18f7ca72e94f92c280aa983ddbd0bcd6ecd037/cryptography-45.0.5-cp37-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:7760c1c2e1a7084153a0f68fab76e754083b126a47d0117c9ed15e69e2103492", size = 4449759, upload_time = "2025-07-02T13:05:41.398Z" },
     { url = "https://files.pythonhosted.org/packages/91/e4/f17e02066de63e0100a3a01b56f8f1016973a1d67551beaf585157a86b3f/cryptography-45.0.5-cp37-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:6ff8728d8d890b3dda5765276d1bc6fb099252915a2cd3aff960c4c195745dd0", size = 4319991, upload_time = "2025-07-02T13:05:43.64Z" },
     { url = "https://files.pythonhosted.org/packages/f2/2e/e2dbd629481b499b14516eed933f3276eb3239f7cee2dcfa4ee6b44d4711/cryptography-45.0.5-cp37-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:7259038202a47fdecee7e62e0fd0b0738b6daa335354396c6ddebdbe1206af2a", size = 4554189, upload_time = "2025-07-02T13:05:46.045Z" },
-    { url = "https://files.pythonhosted.org/packages/f8/ea/a78a0c38f4c8736287b71c2ea3799d173d5ce778c7d6e3c163a95a05ad2a/cryptography-45.0.5-cp37-abi3-win32.whl", hash = "sha256:1e1da5accc0c750056c556a93c3e9cb828970206c68867712ca5805e46dc806f", size = 2911769, upload_time = "2025-07-02T13:05:48.329Z" },
-    { url = "https://files.pythonhosted.org/packages/79/b3/28ac139109d9005ad3f6b6f8976ffede6706a6478e21c889ce36c840918e/cryptography-45.0.5-cp37-abi3-win_amd64.whl", hash = "sha256:90cb0a7bb35959f37e23303b7eed0a32280510030daba3f7fdfbb65defde6a97", size = 3390016, upload_time = "2025-07-02T13:05:50.811Z" },
-    { url = "https://files.pythonhosted.org/packages/c0/71/9bdbcfd58d6ff5084687fe722c58ac718ebedbc98b9f8f93781354e6d286/cryptography-45.0.5-pp311-pypy311_pp73-macosx_10_9_x86_64.whl", hash = "sha256:8c4a6ff8a30e9e3d38ac0539e9a9e02540ab3f827a3394f8852432f6b0ea152e", size = 3587878, upload_time = "2025-07-02T13:06:06.339Z" },
     { url = "https://files.pythonhosted.org/packages/f0/63/83516cfb87f4a8756eaa4203f93b283fda23d210fc14e1e594bd5f20edb6/cryptography-45.0.5-pp311-pypy311_pp73-manylinux_2_28_aarch64.whl", hash = "sha256:bd4c45986472694e5121084c6ebbd112aa919a25e783b87eb95953c9573906d6", size = 4152447, upload_time = "2025-07-02T13:06:08.345Z" },
     { url = "https://files.pythonhosted.org/packages/22/11/d2823d2a5a0bd5802b3565437add16f5c8ce1f0778bf3822f89ad2740a38/cryptography-45.0.5-pp311-pypy311_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:982518cd64c54fcada9d7e5cf28eabd3ee76bd03ab18e08a48cad7e8b6f31b18", size = 4386778, upload_time = "2025-07-02T13:06:10.263Z" },
     { url = "https://files.pythonhosted.org/packages/5f/38/6bf177ca6bce4fe14704ab3e93627c5b0ca05242261a2e43ef3168472540/cryptography-45.0.5-pp311-pypy311_pp73-manylinux_2_34_aarch64.whl", hash = "sha256:12e55281d993a793b0e883066f590c1ae1e802e3acb67f8b442e721e475e6463", size = 4151627, upload_time = "2025-07-02T13:06:13.097Z" },
     { url = "https://files.pythonhosted.org/packages/38/6a/69fc67e5266bff68a91bcb81dff8fb0aba4d79a78521a08812048913e16f/cryptography-45.0.5-pp311-pypy311_pp73-manylinux_2_34_x86_64.whl", hash = "sha256:5aa1e32983d4443e310f726ee4b071ab7569f58eedfdd65e9675484a4eb67bd1", size = 4385593, upload_time = "2025-07-02T13:06:15.689Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/34/31a1604c9a9ade0fdab61eb48570e09a796f4d9836121266447b0eaf7feb/cryptography-45.0.5-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:e357286c1b76403dd384d938f93c46b2b058ed4dfcdce64a770f0537ed3feb6f", size = 3331106, upload_time = "2025-07-02T13:06:18.058Z" },
 ]
 
 [[package]]
@@ -834,7 +690,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "hf-xet", marker = "platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -851,7 +707,7 @@ name = "humanfriendly"
 version = "10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyreadline3", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "pyreadline3", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/3f/2c29224acb2e2df4d2046e4c73ee2662023c58ff5b113c4c1adac0886c43/humanfriendly-10.0.tar.gz", hash = "sha256:6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc", size = 360702, upload_time = "2021-09-17T21:40:43.31Z" }
 wheels = [
@@ -939,7 +795,7 @@ name = "ipykernel"
 version = "6.29.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "appnope", marker = "sys_platform == 'darwin' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "appnope", marker = "sys_platform == 'darwin'" },
     { name = "comm" },
     { name = "debugpy" },
     { name = "ipython" },
@@ -963,12 +819,12 @@ name = "ipython"
 version = "9.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "decorator" },
     { name = "ipython-pygments-lexers" },
     { name = "jedi" },
     { name = "matplotlib-inline" },
-    { name = "pexpect", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'win32' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "prompt-toolkit" },
     { name = "pygments" },
     { name = "stack-data" },
@@ -1092,7 +948,7 @@ version = "5.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "platformdirs" },
-    { name = "pywin32", marker = "(platform_python_implementation != 'PyPy' and sys_platform == 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'win32' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "pywin32", marker = "platform_python_implementation != 'PyPy' and sys_platform == 'win32'" },
     { name = "traitlets" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/99/1b/72906d554acfeb588332eaaa6f61577705e9ec752ddb486f302dafa292d9/jupyter_core-5.8.1.tar.gz", hash = "sha256:0a5f9706f70e64786b75acba995988915ebd4601c8a52e534a40b51c95f59941", size = 88923, upload_time = "2025-05-27T07:38:16.655Z" }
@@ -1109,9 +965,9 @@ dependencies = [
     { name = "jaraco-classes" },
     { name = "jaraco-context" },
     { name = "jaraco-functools" },
-    { name = "jeepney", marker = "sys_platform == 'linux' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "pywin32-ctypes", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "secretstorage", marker = "sys_platform == 'linux' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "jeepney", marker = "sys_platform == 'linux'" },
+    { name = "pywin32-ctypes", marker = "sys_platform == 'win32'" },
+    { name = "secretstorage", marker = "sys_platform == 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/70/09/d904a6e96f76ff214be59e7aa6ef7190008f52a0ab6689760a98de0bf37d/keyring-25.6.0.tar.gz", hash = "sha256:0b39998aa941431eb3d9b0d4b2460bc773b9df6fed7621c2dfb291a7e0187a66", size = 62750, upload_time = "2024-12-25T15:26:45.782Z" }
 wheels = [
@@ -1313,7 +1169,7 @@ dependencies = [
     { name = "packaging" },
     { name = "pillow" },
     { name = "pyyaml" },
-    { name = "regex", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "regex", marker = "sys_platform == 'win32'" },
     { name = "yapf" },
 ]
 wheels = [
@@ -1395,7 +1251,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pyyaml" },
-    { name = "regex", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "regex", marker = "sys_platform == 'win32'" },
     { name = "rich" },
     { name = "termcolor" },
     { name = "yapf" },
@@ -1492,7 +1348,6 @@ version = "12.1.3.1"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/37/6d/121efd7382d5b0284239f4ab1fc1590d86d34ed4a4a2fdb13b30ca8e5740/nvidia_cublas_cu12-12.1.3.1-py3-none-manylinux1_x86_64.whl", hash = "sha256:ee53ccca76a6fc08fb9701aa95b6ceb242cdaab118c3bb152af4e579af792728", size = 410594774, upload_time = "2023-04-19T15:50:03.519Z" },
-    { url = "https://files.pythonhosted.org/packages/c5/ef/32a375b74bea706c93deea5613552f7c9104f961b21df423f5887eca713b/nvidia_cublas_cu12-12.1.3.1-py3-none-win_amd64.whl", hash = "sha256:2b964d60e8cf11b5e1073d179d85fa340c120e99b3067558f3cf98dd69d02906", size = 439918445, upload_time = "2023-04-19T15:56:13.346Z" },
 ]
 
 [[package]]
@@ -1501,7 +1356,6 @@ version = "12.1.105"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/00/6b218edd739ecfc60524e585ba8e6b00554dd908de2c9c66c1af3e44e18d/nvidia_cuda_cupti_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:e54fde3983165c624cb79254ae9818a456eb6e87a7fd4d56a2352c24ee542d7e", size = 14109015, upload_time = "2023-04-19T15:47:32.502Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/56/0021e32ea2848c24242f6b56790bd0ccc8bf99f973ca790569c6ca028107/nvidia_cuda_cupti_cu12-12.1.105-py3-none-win_amd64.whl", hash = "sha256:bea8236d13a0ac7190bd2919c3e8e6ce1e402104276e6f9694479e48bb0eb2a4", size = 10154340, upload_time = "2023-04-19T15:53:33.563Z" },
 ]
 
 [[package]]
@@ -1510,7 +1364,6 @@ version = "12.1.105"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/9f/c64c03f49d6fbc56196664d05dba14e3a561038a81a638eeb47f4d4cfd48/nvidia_cuda_nvrtc_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:339b385f50c309763ca65456ec75e17bbefcbbf2893f462cb8b90584cd27a1c2", size = 23671734, upload_time = "2023-04-19T15:48:32.42Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/1d/f76987c4f454eb86e0b9a0e4f57c3bf1ac1d13ad13cd1a4da4eb0e0c0ce9/nvidia_cuda_nvrtc_cu12-12.1.105-py3-none-win_amd64.whl", hash = "sha256:0a98a522d9ff138b96c010a65e145dc1b4850e9ecb75a0172371793752fd46ed", size = 19331863, upload_time = "2023-04-19T15:54:34.603Z" },
 ]
 
 [[package]]
@@ -1519,7 +1372,6 @@ version = "12.1.105"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/d5/c68b1d2cdfcc59e72e8a5949a37ddb22ae6cade80cd4a57a84d4c8b55472/nvidia_cuda_runtime_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:6e258468ddf5796e25f1dc591a31029fa317d97a0a94ed93468fc86301d61e40", size = 823596, upload_time = "2023-04-19T15:47:22.471Z" },
-    { url = "https://files.pythonhosted.org/packages/9f/e2/7a2b4b5064af56ea8ea2d8b2776c0f2960d95c88716138806121ae52a9c9/nvidia_cuda_runtime_cu12-12.1.105-py3-none-win_amd64.whl", hash = "sha256:dfb46ef84d73fababab44cf03e3b83f80700d27ca300e537f85f636fac474344", size = 821226, upload_time = "2023-04-19T15:53:23.082Z" },
 ]
 
 [[package]]
@@ -1527,7 +1379,7 @@ name = "nvidia-cudnn-cu12"
 version = "8.9.2.26"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "nvidia-cublas-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ff/74/a2e2be7fb83aaedec84f391f082cf765dfb635e7caa9b49065f73e4835d8/nvidia_cudnn_cu12-8.9.2.26-py3-none-manylinux1_x86_64.whl", hash = "sha256:5ccb288774fdfb07a7e7025ffec286971c06d8d7b4fb162525334616d7629ff9", size = 731725872, upload_time = "2023-06-01T19:24:57.328Z" },
@@ -1539,7 +1391,6 @@ version = "11.0.2.54"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/86/94/eb540db023ce1d162e7bea9f8f5aa781d57c65aed513c33ee9a5123ead4d/nvidia_cufft_cu12-11.0.2.54-py3-none-manylinux1_x86_64.whl", hash = "sha256:794e3948a1aa71fd817c3775866943936774d1c14e7628c74f6f7417224cdf56", size = 121635161, upload_time = "2023-04-19T15:50:46Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/57/7927a3aa0e19927dfed30256d1c854caf991655d847a4e7c01fe87e3d4ac/nvidia_cufft_cu12-11.0.2.54-py3-none-win_amd64.whl", hash = "sha256:d9ac353f78ff89951da4af698f80870b1534ed69993f10a4cf1d96f21357e253", size = 121344196, upload_time = "2023-04-19T15:56:59.562Z" },
 ]
 
 [[package]]
@@ -1548,7 +1399,6 @@ version = "10.3.2.106"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/44/31/4890b1c9abc496303412947fc7dcea3d14861720642b49e8ceed89636705/nvidia_curand_cu12-10.3.2.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:9d264c5036dde4e64f1de8c50ae753237c12e0b1348738169cd0f8a536c0e1e0", size = 56467784, upload_time = "2023-04-19T15:51:04.804Z" },
-    { url = "https://files.pythonhosted.org/packages/5c/97/4c9c7c79efcdf5b70374241d48cf03b94ef6707fd18ea0c0f53684931d0b/nvidia_curand_cu12-10.3.2.106-py3-none-win_amd64.whl", hash = "sha256:75b6b0c574c0037839121317e17fd01f8a69fd2ef8e25853d826fec30bdba74a", size = 55995813, upload_time = "2023-04-19T15:57:16.676Z" },
 ]
 
 [[package]]
@@ -1556,13 +1406,12 @@ name = "nvidia-cusolver-cu12"
 version = "11.4.5.107"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cusparse-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cusparse-cu12" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928, upload_time = "2023-04-19T15:51:25.781Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/80/8fca0bf819122a631c3976b6fc517c1b10741b643b94046bd8dd451522c5/nvidia_cusolver_cu12-11.4.5.107-py3-none-win_amd64.whl", hash = "sha256:74e0c3a24c78612192a74fcd90dd117f1cf21dea4822e66d89e8ea80e3cd2da5", size = 121643081, upload_time = "2023-04-19T15:57:43.035Z" },
 ]
 
 [[package]]
@@ -1570,11 +1419,10 @@ name = "nvidia-cusparse-cu12"
 version = "12.1.0.106"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278, upload_time = "2023-04-19T15:51:49.939Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/95/48fdbba24c93614d1ecd35bc6bdc6087bd17cbacc3abc4b05a9c2a1ca232/nvidia_cusparse_cu12-12.1.0.106-py3-none-win_amd64.whl", hash = "sha256:b798237e81b9719373e8fae8d4f091b70a0cf09d9d85c95a557e11df2d8e9a5a", size = 195414588, upload_time = "2023-04-19T15:58:08.389Z" },
 ]
 
 [[package]]
@@ -1591,8 +1439,6 @@ version = "12.6.85"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9d/d7/c5383e47c7e9bf1c99d5bd2a8c935af2b6d705ad831a7ec5c97db4d82f4f/nvidia_nvjitlink_cu12-12.6.85-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:eedc36df9e88b682efe4309aa16b5b4e78c2407eac59e8c10a6a47535164369a", size = 19744971, upload_time = "2024-11-20T17:46:53.366Z" },
-    { url = "https://files.pythonhosted.org/packages/31/db/dc71113d441f208cdfe7ae10d4983884e13f464a6252450693365e166dcf/nvidia_nvjitlink_cu12-12.6.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cf4eaa7d4b6b543ffd69d6abfb11efdeb2db48270d94dfd3a452c24150829e41", size = 19270338, upload_time = "2024-11-20T17:46:29.758Z" },
-    { url = "https://files.pythonhosted.org/packages/89/76/93c1467b1387387440a4d25102d86b7794535449b689f8e2dc22c1c8ff7f/nvidia_nvjitlink_cu12-12.6.85-py3-none-win_amd64.whl", hash = "sha256:e61120e52ed675747825cdd16febc6a0730537451d867ee58bee3853b1b13d1c", size = 161908572, upload_time = "2024-11-20T17:52:40.124Z" },
 ]
 
 [[package]]
@@ -1601,7 +1447,6 @@ version = "12.1.105"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/d3/8057f0587683ed2fcd4dbfbdfdfa807b9160b809976099d36b8f60d08f03/nvidia_nvtx_cu12-12.1.105-py3-none-manylinux1_x86_64.whl", hash = "sha256:dc21cf308ca5691e7c04d962e213f8a4aa9bbfa23d95412f452254c2caeb09e5", size = 99138, upload_time = "2023-04-19T15:48:43.556Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/d7/bd7cb2d95ac6ac6e8d05bfa96cdce69619f1ef2808e072919044c2d47a8c/nvidia_nvtx_cu12-12.1.105-py3-none-win_amd64.whl", hash = "sha256:65f4d98982b31b60026e0e6de73fbdfc09d08a96f4656dd3665ca616a11e1e82", size = 66307, upload_time = "2023-04-19T15:54:45.736Z" },
 ]
 
 [[package]]
@@ -1623,7 +1468,7 @@ version = "0.25.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pydantic" },
@@ -1950,7 +1795,7 @@ name = "pytest"
 version = "8.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -2036,7 +1881,7 @@ name = "pyzmq"
 version = "27.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "implementation_name == 'pypy' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "cffi", marker = "implementation_name == 'pypy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/06/50a4e9648b3e8b992bef8eb632e457307553a89d294103213cfd47b3da69/pyzmq-27.0.0.tar.gz", hash = "sha256:b1f08eeb9ce1510e6939b6e5dcd46a17765e2333daae78ecf4606808442e52cf", size = 280478, upload_time = "2025-06-13T14:09:07.087Z" }
 wheels = [
@@ -2136,7 +1981,7 @@ name = "ruamel-yaml"
 version = "0.18.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ruamel-yaml-clib", marker = "platform_python_implementation == 'CPython' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "ruamel-yaml-clib", marker = "platform_python_implementation == 'CPython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/39/87/6da0df742a4684263261c253f00edd5829e6aca970fff69e75028cccc547/ruamel.yaml-0.18.14.tar.gz", hash = "sha256:7227b76aaec364df15936730efbf7d72b30c0b79b1d578bbb8e3dcb2d81f52b7", size = 145511, upload_time = "2025-06-09T08:51:09.828Z" }
 wheels = [
@@ -2251,8 +2096,8 @@ name = "secretstorage"
 version = "3.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'darwin' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "jeepney", marker = "sys_platform != 'darwin' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/53/a4/f48c9d79cb507ed1373477dbceaba7401fd8a23af63b837fa61f1dcd3691/SecretStorage-3.3.3.tar.gz", hash = "sha256:2403533ef369eca6d2ba81718576c5e0f564d5cca1b58f73a8b23e7d4eeebd77", size = 19739, upload_time = "2022-08-13T16:22:46.976Z" }
 wheels = [
@@ -2480,19 +2325,19 @@ dependencies = [
     { name = "fsspec" },
     { name = "jinja2" },
     { name = "networkx" },
-    { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
-    { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-cupti-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-nvrtc-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-runtime-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cufft-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-curand-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cusolver-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "sympy" },
-    { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform != 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "triton", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "typing-extensions" },
 ]
 wheels = [
@@ -2554,7 +2399,7 @@ name = "tqdm"
 version = "4.67.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload_time = "2024-11-24T20:12:22.481Z" }
 wheels = [
@@ -2596,7 +2441,7 @@ name = "triton"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu') or (sys_platform == 'linux' and extra == 'extra-12-atria-models-torch-cpu' and extra == 'extra-12-atria-models-torch-gpu')" },
+    { name = "filelock" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/c1/54fffb2eb13d293d9a429fead3646752ea190de0229bcf3d591ba2481263/triton-2.1.0-0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:919b06453f0033ea52c13eaf7833de0e57db3178d23d4e04f9fc71c4f2c32bf8", size = 89234153, upload_time = "2023-09-01T07:26:20.161Z" },

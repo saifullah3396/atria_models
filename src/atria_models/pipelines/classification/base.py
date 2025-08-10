@@ -28,10 +28,12 @@ from typing import TYPE_CHECKING, Any
 
 from atria_core.logger import get_logger
 from atria_core.types import DocumentInstance, ImageInstance
+
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipeline
 
 if TYPE_CHECKING:
     from atria_core.types import ClassificationModelOutput
+
     from atria_models.core.atria_model import AtriaModel
 
 logger = get_logger(__name__)
@@ -69,12 +71,22 @@ class ClassificationPipeline(AtriaModelPipeline):
         """
 
         from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_train(logits, batch.gt.classification.label.value)
+        predicted_labels = logits.argmax(dim=-1)
         return ClassificationModelOutput(
-            loss=loss, logits=logits, label=batch.gt.classification.label
+            loss=loss,
+            logits=logits,
+            gt_label=batch.gt.classification.label.value,
+            gt_label_name=batch.gt.classification.label.name,
+            predicted_label=predicted_labels,
+            predicted_label_name=[
+                self._dataset_metadata.dataset_labels.classification[i]
+                for i in predicted_labels.tolist()
+            ],
         )
 
     def evaluation_step(
@@ -92,6 +104,7 @@ class ClassificationPipeline(AtriaModelPipeline):
         """
 
         from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
@@ -124,14 +137,13 @@ class ClassificationPipeline(AtriaModelPipeline):
         """
 
         from atria_core.types import ClassificationModelOutput
+
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
         logits = _get_logits_from_output(self._model_forward(batch))
         predicted_labels = logits.argmax(dim=-1)
         return ClassificationModelOutput(
             logits=logits,
-            gt_label=batch.gt.classification.label.value,
-            gt_label_name=batch.gt.classification.label.name,
             predicted_label=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]

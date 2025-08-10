@@ -24,7 +24,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from atria_core.logger.logger import get_logger
 from atria_core.types import SequenceQAModelOutput, TaskType
+
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import QuestionAnsweringModel
 from atria_models.pipelines.atria_model_pipeline import (
@@ -37,6 +39,8 @@ from atria_models.registry import MODEL_PIPELINE
 if TYPE_CHECKING:
     import torch
     from atria_transforms.data_types import TokenizedDocumentInstance
+
+logger = get_logger(__name__)
 
 
 class QuestionAnsweringPipelineConfig(AtriaModelPipelineConfig):
@@ -83,35 +87,20 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
     __config_cls__ = QuestionAnsweringPipelineConfig
     __task_type__: TaskType = TaskType.visual_question_answering
 
-    def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
+    def can_be_evaluated(self, batch: TokenizedDocumentInstance) -> bool:
         """
-        Fix the input stride for the batch.
+        Check if the batch can be evaluated.
 
         Args:
             batch (TokenizedDocumentInstance): The input batch of data.
-        """
-        # here we check if the input is strided or not. With strided input tokenization, the first "number of stride"
-        # tokens are to be ignored for evaluation as they will be repeated tokens from the previous part of the document
-        # first we check if there are overflowing samples in the batch and if so for these tokens first N stride tokens
-        # are to be ignored for evaluation
-        if self.config.input_stride > 0:
-            for sample_idx, sample_word_ids in enumerate(batch.word_ids):
-                # if the minimum word id is greater than 0, then we have an overflowing sample
-                # this means this is a continuation of the previous sample and the first N tokens
-                if sample_word_ids[sample_word_ids != -100].min() > 0:
-                    batch.prediction_indices_mask[sample_idx][
-                        : self.config.input_stride
-                    ] = False
 
-    def _extract_target_labels(self, batch: TokenizedDocumentInstance):
-        target_labels = []
-        for target, mask in zip(
-            batch.token_labels, batch.prediction_indices_mask, strict=True
-        ):
-            target_labels.append(
-                [self._dataset_metadata.dataset_labels.ser[i] for i in target[mask]]
-            )
-        return target_labels
+        Returns:
+            bool: True if the batch can be evaluated, False otherwise.
+        """
+        return (
+            batch.tokenized_answer_start is not None
+            and batch.tokenized_answer_end is not None
+        )
 
     def _extract_predicted_answers(
         self,
@@ -120,6 +109,11 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         end_logits: torch.Tensor,
     ):
         pred_answers = []
+        logger.info(
+            "Extracting predicted answers from logits.: %s, %s",
+            start_logits.argmax(-1),
+            end_logits.argmax(-1),
+        )
         for input_id, start_idx, end_idx in zip(
             batch.token_ids, start_logits.argmax(-1), end_logits.argmax(-1), strict=True
         ):
@@ -148,6 +142,9 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
+        predicted_answers = self._extract_predicted_answers(
+            batch, output.start_logits, output.end_logits
+        )
         return SequenceQAModelOutput(
             loss=output.loss,
             start_logits=output.start_logits,
@@ -157,6 +154,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             sequence_ids=batch.sequence_ids,
             question_id=batch.qa_pair.id,
             gold_answers=batch.qa_pair.answer_text,
+            predicted_answers=predicted_answers,
         )
 
     def evaluation_step(
@@ -183,6 +181,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
         predicted_answers = self._extract_predicted_answers(
             batch, output.start_logits, output.end_logits
         )
+        logger.info("Evaluation step output: %s", predicted_answers)
         output = SequenceQAModelOutput(
             loss=output.loss.detach().cpu(),
             start_logits=output.start_logits.detach().cpu(),
@@ -217,6 +216,11 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
+        predicted_answers = self._extract_predicted_answers(
+            batch, output.start_logits, output.end_logits
+        )
+        logger = get_logger(__name__)
+        logger.info("Evaluation step output: %s", predicted_answers)
         return SequenceQAModelOutput(
             loss=output.loss,
             start_logits=output.start_logits,
@@ -226,6 +230,7 @@ class QuestionAnsweringPipeline(AtriaModelPipeline):
             sequence_ids=batch.sequence_ids,
             question_id=batch.qa_pair.id,
             gold_answers=batch.qa_pair.answer_text,
+            predicted_answers=predicted_answers,
         )
 
     def _prepare_build_kwargs(self) -> dict[str, dict[str, Any]] | dict[str, Any]:

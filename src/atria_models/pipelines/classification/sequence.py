@@ -81,6 +81,9 @@ class SequenceClassificationPipeline(ClassificationPipeline):
     __config_cls__ = SequenceClassificationPipelineConfig
     __task_type__: TaskType = TaskType.sequence_classification
 
+    def can_be_evaluated(self, batch: TokenizedDocumentInstance) -> bool:
+        return batch.label is not None
+
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
     ) -> ClassificationModelOutput:
@@ -107,7 +110,18 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_train(logits, batch.label.value)
-        return ClassificationModelOutput(loss=loss, logits=logits, label=batch.label)
+        predicted_labels = logits.argmax(dim=-1)
+        return ClassificationModelOutput(
+            loss=loss,
+            logits=logits,
+            gt_label=batch.label.value,
+            gt_label_name=batch.label.name,
+            predicted_label=predicted_labels,
+            predicted_label_name=[
+                self._dataset_metadata.dataset_labels.classification[i]
+                for i in predicted_labels.tolist()
+            ],
+        )
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
@@ -135,7 +149,18 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_eval(logits, batch.label.value)
-        return ClassificationModelOutput(loss=loss, logits=logits, label=batch.label)
+        predicted_labels = logits.argmax(dim=-1)
+        return ClassificationModelOutput(
+            loss=loss,
+            logits=logits,
+            gt_label=batch.label.value,
+            gt_label_name=batch.label.name,
+            predicted_label=predicted_labels,
+            predicted_label_name=[
+                self._dataset_metadata.dataset_labels.classification[i]
+                for i in predicted_labels.tolist()
+            ],
+        )
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
@@ -162,8 +187,14 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             batch.select_first_overflow_samples()
 
         logits = _get_logits_from_output(self._model_forward(batch))
+        predicted_labels = logits.argmax(dim=-1)
         return ClassificationModelOutput(
-            logits=logits, prediction=logits.argmax(dim=-1)
+            logits=logits,
+            predicted_label=predicted_labels,
+            predicted_label_name=[
+                self._dataset_metadata.dataset_labels.classification[i]
+                for i in predicted_labels.tolist()
+            ],
         )
 
     def _model_forward(self, batch: TokenizedDocumentInstance) -> Any:
