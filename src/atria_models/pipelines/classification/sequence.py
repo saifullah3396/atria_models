@@ -114,9 +114,10 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         return ClassificationModelOutput(
             loss=loss,
             logits=logits,
-            gt_label=batch.label.value,
+            prediction_probs=logits.softmax(dim=-1),
+            gt_label_value=batch.label.value,
             gt_label_name=batch.label.name,
-            predicted_label=predicted_labels,
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()
@@ -153,9 +154,10 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         return ClassificationModelOutput(
             loss=loss,
             logits=logits,
-            gt_label=batch.label.value,
+            prediction_probs=logits.softmax(dim=-1),
+            gt_label_value=batch.label.value,
             gt_label_name=batch.label.name,
-            predicted_label=predicted_labels,
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()
@@ -190,7 +192,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         predicted_labels = logits.argmax(dim=-1)
         return ClassificationModelOutput(
             logits=logits,
-            predicted_label=predicted_labels,
+            prediction_probs=logits.softmax(dim=-1),
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()

@@ -80,9 +80,10 @@ class ClassificationPipeline(AtriaModelPipeline):
         return ClassificationModelOutput(
             loss=loss,
             logits=logits,
-            gt_label=batch.gt.classification.label.value,
+            prediction_probs=logits.softmax(dim=-1),
+            gt_label_value=batch.gt.classification.label.value,
             gt_label_name=batch.gt.classification.label.name,
-            predicted_label=predicted_labels,
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()
@@ -107,15 +108,19 @@ class ClassificationPipeline(AtriaModelPipeline):
 
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
+        # logger.info(batch.image.content)
         logits = _get_logits_from_output(self._model_forward(batch))
         loss = self._loss_fn_eval(logits, batch.gt.classification.label.value)
         predicted_labels = logits.argmax(dim=-1)
+        # logger.info("gt %s", batch.gt.classification.label.value)
+        # logger.info("pred %s", predicted_labels)
         return ClassificationModelOutput(
             loss=loss,
             logits=logits,
-            gt_label=batch.gt.classification.label.value,
+            prediction_probs=logits.softmax(dim=-1),
+            gt_label_value=batch.gt.classification.label.value,
             gt_label_name=batch.gt.classification.label.name,
-            predicted_label=predicted_labels,
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()
@@ -140,11 +145,15 @@ class ClassificationPipeline(AtriaModelPipeline):
 
         from atria_models.utilities.nn_modules import _get_logits_from_output
 
+        # logger.info(batch.image.content)
         logits = _get_logits_from_output(self._model_forward(batch))
         predicted_labels = logits.argmax(dim=-1)
+        # logger.info("gt %s", batch.gt.classification.label.value)
+        # logger.info("pred %s", predicted_labels)
         return ClassificationModelOutput(
             logits=logits,
-            predicted_label=predicted_labels,
+            prediction_probs=logits.softmax(dim=-1),
+            predicted_label_value=predicted_labels,
             predicted_label_name=[
                 self._dataset_metadata.dataset_labels.classification[i]
                 for i in predicted_labels.tolist()

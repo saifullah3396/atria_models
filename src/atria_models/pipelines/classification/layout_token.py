@@ -24,17 +24,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from atria_core.types import LayoutTokenClassificationModelOutput, TaskType
+
 from atria_models.core.local_model import LocalModel
 from atria_models.core.transformers_model import TokenClassificationModel
 from atria_models.pipelines.atria_model_pipeline import AtriaModelPipelineConfig
-from atria_models.pipelines.classification.base import ClassificationPipeline
+from atria_models.pipelines.classification.token import TokenClassificationPipeline
 from atria_models.pipelines.utilities import OverflowStrategy
 from atria_models.registry import MODEL_PIPELINE
 
 if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any
 
-    import torch
     from atria_transforms.data_types import TokenizedDocumentInstance
 
 
@@ -63,7 +63,7 @@ class SequenceClassificationPipelineConfig(AtriaModelPipelineConfig):
         {"/metric@metrics.layout_f1": "layout_f1"},
     ],
 )
-class LayoutTokenClassificationPipeline(ClassificationPipeline):
+class LayoutTokenClassificationPipeline(TokenClassificationPipeline):
     """
     A pipeline for layout token classification tasks.
 
@@ -84,174 +84,42 @@ class LayoutTokenClassificationPipeline(ClassificationPipeline):
     __config_cls__ = SequenceClassificationPipelineConfig
     __task_type__: TaskType = TaskType.layout_token_classification
 
-    def _remove_predictions_for_strided_input(self, batch: TokenizedDocumentInstance):
-        """
-        Fix the input stride for the batch.
-
-        Args:
-            batch (TokenizedDocumentInstance): The input batch of data.
-        """
-        # here we check if the input is strided or not. With strided input tokenization, the first "number of stride"
-        # tokens are to be ignored for evaluation as they will be repeated tokens from the previous part of the document
-        # first we check if there are overflowing samples in the batch and if so for these tokens first N stride tokens
-        # are to be ignored for evaluation
-        if self.config.input_stride > 0:
-            for sample_idx, sample_word_ids in enumerate(batch.word_ids):
-                # if the minimum word id is greater than 0, then we have an overflowing sample
-                # this means this is a continuation of the previous sample and the first N tokens
-                if sample_word_ids[sample_word_ids != -100].min() > 0:
-                    batch.prediction_indices_mask[sample_idx][
-                        : self.config.input_stride
-                    ] = False
-
-    def _extract_target_labels(self, batch: TokenizedDocumentInstance):
-        target_labels = []
-        for target, mask in zip(
-            batch.token_labels, batch.prediction_indices_mask, strict=True
-        ):
-            target_labels.append(
-                [self._dataset_metadata.dataset_labels.ser[i] for i in target[mask]]
-            )
-        return target_labels
-
-    def _extract_predicted_labels(
-        self, batch: TokenizedDocumentInstance, logits: torch.Tensor
-    ):
-        predicted_labels = []
-        for predicted, mask in zip(
-            logits.argmax(-1), batch.prediction_indices_mask, strict=True
-        ):
-            predicted_labels.append(
-                [self._dataset_metadata.dataset_labels.ser[i] for i in predicted[mask]]
-            )
-        return predicted_labels
-
-    def training_step(
-        self, batch: TokenizedDocumentInstance, **kwargs
+    def _output_transform(
+        self,
+        batch: TokenizedDocumentInstance,
+        model_output: LayoutTokenClassificationModelOutput,
     ) -> LayoutTokenClassificationModelOutput:
         """
-        Performs a single training step.
+        Transform the model output to the expected format for token classification.
 
         Args:
             batch (TokenizedDocumentInstance): The input batch of data.
-            **kwargs: Additional arguments.
+            model_output (TokenClassificationModelOutput): The output from the model.
 
         Returns:
-            ClassificationModelOutput: The output of the training step, including loss and logits.
+            TokenClassificationModelOutput: The transformed output with labels and logits.
         """
-
-        if self.config.training_overflow_strategy == OverflowStrategy.select_all:
-            batch.select_all_overflow_samples()
-        elif self.config.training_overflow_strategy == OverflowStrategy.select_random:
-            batch.select_random_overflow_samples()
-        elif self.config.training_overflow_strategy == OverflowStrategy.select_first:
-            batch.select_first_overflow_samples()
-
-        output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
-
         # map the labels from the model output to the evaluation labels
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-
-        return LayoutTokenClassificationModelOutput(
-            loss=loss,
-            logits=logits,
-            token_labels=batch.token_labels,
-            token_bboxes=batch.token_bboxes,
-            predicted_labels=predicted_labels,
+        predicted_label_names, predicted_label_values = self._extract_predicted_labels(
+            batch=batch, logits=model_output.logits
+        )
+        prediction_probs = self._extract_prediction_probs(
+            logits=model_output.logits, mask=batch.prediction_indices_mask
         )
 
-    def evaluation_step(
-        self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> LayoutTokenClassificationModelOutput:
-        """
-        Performs a single evaluation step.
-
-        Args:
-            batch (TokenizedDocumentInstance): The input batch of data.
-            **kwargs: Additional arguments.
-
-        Returns:
-            ClassificationModelOutput: The output of the evaluation step, including loss and logits.
-        """
-        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
-            batch.select_all_overflow_samples()
-        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
-            batch.select_random_overflow_samples()
-        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
-            batch.select_first_overflow_samples()
-        output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
-
-        # set prediction_indices to false for strided input tokens
-        self._remove_predictions_for_strided_input(batch)
-
-        # map the labels from the model output to the evaluation labels
         batch.token_labels[~batch.prediction_indices_mask] = -100
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-
         return LayoutTokenClassificationModelOutput(
-            loss=loss,
-            logits=logits,
+            loss=model_output.loss,
+            logits=model_output.logits,
             token_labels=batch.token_labels,
             token_bboxes=batch.token_bboxes,
-            predicted_labels=predicted_labels,
+            predicted_label_names=predicted_label_names,
+            predicted_label_values=predicted_label_values,
+            prediction_probs=prediction_probs,
+            words=batch.words,
+            word_bboxes=batch.word_bboxes.value,
+            word_bboxes_mode=batch.word_bboxes.mode,
         )
-
-    def predict_step(
-        self, batch: TokenizedDocumentInstance, **kwargs
-    ) -> LayoutTokenClassificationModelOutput:
-        """
-        Performs a single prediction step.
-
-        Args:
-            batch (TokenizedDocumentInstance): The input batch of data.
-            **kwargs: Additional arguments.
-
-        Returns:
-            ClassificationModelOutput: The output of the prediction step, including logits and predictions.
-        """
-
-        if self.config.evaluation_overflow_strategy == OverflowStrategy.select_all:
-            batch.select_all_overflow_samples()
-        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_random:
-            batch.select_random_overflow_samples()
-        elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
-            batch.select_first_overflow_samples()
-
-        # map the labels from the model output to the evaluation labels
-        output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-        return LayoutTokenClassificationModelOutput(
-            loss=loss,
-            logits=logits,
-            token_labels=batch.token_labels,
-            token_bboxes=batch.token_bboxes,
-            predicted_labels=predicted_labels,
-        )
-
-    def _prepare_build_kwargs(self) -> dict[str, dict[str, Any]] | dict[str, Any]:
-        """
-        Prepares keyword arguments for building the model.
-
-        Returns:
-            Dict[str, Dict[str, Any]] | Dict[str, Any]: The prepared keyword arguments.
-        """
-        if self._dataset_metadata is None:
-            return {}
-        assert self._dataset_metadata.dataset_labels.ser is not None, (
-            f"`token_classification` dataset labels must be provided for {self.__class__.__name__}."
-            f"Dataset labels found in metadata: {self._dataset_metadata.dataset_labels}"
-        )
-        labels = self._dataset_metadata.dataset_labels.ser
-        if isinstance(self._model, dict):
-            return {key: {"num_labels": len(labels)} for key in self._model}
-        else:
-            return {"num_labels": len(labels)}
 
     def _model_forward(self, batch: TokenizedDocumentInstance) -> Any:
         """

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from atria_core.logger.logger import get_logger
 from atria_core.types import TaskType, TokenClassificationModelOutput
 
 from atria_models.core.local_model import LocalModel
@@ -36,6 +37,8 @@ if TYPE_CHECKING:
     import torch
     from atria_core.types import TokenClassificationModelOutput
     from atria_transforms.data_types import TokenizedDocumentInstance
+
+logger = get_logger(__name__)
 
 
 class TokenClassificationPipelineConfig(AtriaModelPipelineConfig):
@@ -111,26 +114,92 @@ class TokenClassificationPipeline(ClassificationPipeline):
                     ] = False
 
     def _extract_target_labels(self, batch: TokenizedDocumentInstance):
-        target_labels = []
+        target_label_names = []
+        target_label_values = []
         for target, mask in zip(
             batch.token_labels, batch.prediction_indices_mask, strict=True
         ):
-            target_labels.append(
+            target_label_names.append(
                 [self._dataset_metadata.dataset_labels.ser[i] for i in target[mask]]
             )
-        return target_labels
+            target_label_values.append(target[mask])
+        return target_label_names, target_label_values
 
     def _extract_predicted_labels(
         self, batch: TokenizedDocumentInstance, logits: torch.Tensor
     ):
-        predicted_labels = []
+        predicted_label_names = []
+        predicted_label_values = []
         for predicted, mask in zip(
             logits.argmax(-1), batch.prediction_indices_mask, strict=True
         ):
-            predicted_labels.append(
+            predicted_label_names.append(
                 [self._dataset_metadata.dataset_labels.ser[i] for i in predicted[mask]]
             )
-        return predicted_labels
+            predicted_label_values.append(predicted[mask])
+        return predicted_label_names, predicted_label_values
+
+    def _extract_prediction_probs(
+        self, batch: TokenizedDocumentInstance, logits: torch.Tensor
+    ) -> torch.Tensor | None:
+        """
+        Extracts the prediction probabilities from the logits.
+
+        Args:
+            logits (torch.Tensor): The raw logits from the model.
+            mask (torch.Tensor): The mask indicating which tokens to consider.
+
+        Returns:
+            torch.Tensor | None: The prediction probabilities, or None if logits are None.
+        """
+        import torch
+
+        prediction_probs = []
+        for probs, mask in zip(
+            torch.softmax(logits, dim=-1), batch.prediction_indices_mask, strict=True
+        ):
+            prediction_probs.append(probs[mask])
+        return prediction_probs
+
+    def _output_transform(
+        self,
+        batch: TokenizedDocumentInstance,
+        model_output: TokenClassificationModelOutput,
+    ) -> TokenClassificationModelOutput:
+        """
+        Transform the model output to the expected format for token classification.
+
+        Args:
+            batch (TokenizedDocumentInstance): The input batch of data.
+            model_output (TokenClassificationModelOutput): The output from the model.
+
+        Returns:
+            TokenClassificationModelOutput: The transformed output with labels and logits.
+        """
+        # map the labels from the model output to the evaluation labels
+        if batch.token_labels is not None:
+            target_label_names, target_label_values = self._extract_target_labels(batch)
+        else:
+            target_label_names, target_label_values = None, None
+        predicted_label_names, predicted_label_values = self._extract_predicted_labels(
+            batch=batch, logits=model_output.logits
+        )
+        prediction_probs = self._extract_prediction_probs(
+            batch=batch, logits=model_output.logits
+        )
+
+        return TokenClassificationModelOutput(
+            loss=model_output.loss,
+            logits=model_output.logits,
+            predicted_label_names=predicted_label_names,
+            predicted_label_values=predicted_label_values,
+            target_label_names=target_label_names,
+            target_label_values=target_label_values,
+            prediction_probs=prediction_probs,
+            words=batch.words,
+            word_bboxes=batch.word_bboxes.value,
+            word_bboxes_mode=batch.word_bboxes.mode,
+        )
 
     def training_step(
         self, batch: TokenizedDocumentInstance, **kwargs
@@ -154,19 +223,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
             batch.select_first_overflow_samples()
 
         output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
-
-        # map the labels from the model output to the evaluation labels
-        target_labels = self._extract_target_labels(batch=batch, logits=logits)
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-
-        return TokenClassificationModelOutput(
-            loss=loss,
-            logits=logits,
-            predicted_labels=predicted_labels,
-            target_labels=target_labels,
-        )
+        return self._output_transform(batch, output)
 
     def evaluation_step(
         self, batch: TokenizedDocumentInstance, **kwargs
@@ -188,21 +245,11 @@ class TokenClassificationPipeline(ClassificationPipeline):
         elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
         output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
 
         # set prediction_indices to false for strided input tokens
         self._remove_predictions_for_strided_input(batch)
 
-        # map the labels from the model output to the evaluation labels
-        target_labels = self._extract_target_labels(batch=batch)
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-        return TokenClassificationModelOutput(
-            loss=loss,
-            logits=logits,
-            predicted_labels=predicted_labels,
-            target_labels=target_labels,
-        )
+        return self._output_transform(batch, output)
 
     def predict_step(
         self, batch: TokenizedDocumentInstance, **kwargs
@@ -225,14 +272,7 @@ class TokenClassificationPipeline(ClassificationPipeline):
         elif self.config.evaluation_overflow_strategy == OverflowStrategy.select_first:
             batch.select_first_overflow_samples()
         output = self._model_forward(batch)
-        logits = output.logits
-        loss = output.loss
-
-        # map the labels from the model output to the evaluation labels
-        predicted_labels = self._extract_predicted_labels(batch=batch, logits=logits)
-        return TokenClassificationModelOutput(
-            loss=loss, logits=logits, predicted_labels=predicted_labels
-        )
+        return self._output_transform(batch, output)
 
     def _prepare_build_kwargs(self) -> dict[str, dict[str, Any]] | dict[str, Any]:
         """

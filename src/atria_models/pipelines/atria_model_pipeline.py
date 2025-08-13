@@ -424,6 +424,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
         dataset_metadata = DatasetMetadata.model_validate(dataset_metadata)
         self.build(dataset_metadata=dataset_metadata, tb_logger=tb_logger)
         self.load_state_dict(checkpoint)
+
         return self
 
     def to_device(self, device: str | torch.device, sync_bn: bool = False) -> None:
@@ -570,6 +571,7 @@ class AtriaModelPipeline(ABC, ModelPipelineConfigMixin, RepresentationMixin):
                 state_dict["non_trainable_models"]
             )
         elif "model" in state_dict:
+            logger.info("Loading model state dict.")
             self._model.load_state_dict(state_dict["model"], strict=False)
 
     def upload_to_hub(
