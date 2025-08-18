@@ -77,6 +77,8 @@ class ModelPipelineConfigMixin:
     __config_cls__: type[AtriaModelPipelineConfig]
 
     def __init__(self, **kwargs):
+        from atria_core.utilities.strings import _convert_to_snake_case
+
         config_cls = getattr(self.__class__, "__config_cls__", None)
         assert issubclass(config_cls, AtriaModelPipelineConfig), (
             f"{self.__class__.__name__} must define a __config_cls__ attribute "
@@ -84,7 +86,7 @@ class ModelPipelineConfigMixin:
         )
         self._config = config_cls(**kwargs)
         if self._config.pipeline_name is None:
-            self._config.pipeline_name = self.__class__.__name__.lower()
+            self._config.pipeline_name = _convert_to_snake_case(self.__class__.__name__)
         super().__init__()
 
     def __init_subclass__(cls, **kwargs):
